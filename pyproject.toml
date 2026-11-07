@@ -3,6 +3,7 @@ name = "esim-ble"
 version = "0.1.0"
 description = "Manage 9eSIM card profiles over macOS Bluetooth and read/send SMS through a ZTE-goform MiFi"
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = ["bleak>=0.22", "cryptography>=42"]
 
 [project.optional-dependencies]

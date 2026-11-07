@@ -106,3 +106,7 @@ logs/              运行日志（运行后生成，不入库）
 - **存储：** 短信入库到 `data/esimble.db` 后，从随身 WiFi 删除（设备最多存 20 条）。
 - **不要混用：** 平台运行时，不要再用 `esimble card` 或 `esimble mifi` 手动操作卡和随身 WiFi。
 - **代码位置：** `esimble/platform/`，测试 `tests/test_platform.py`，MCP 自检脚本 `scripts/mcp_smoke.py`。
+
+## 许可证
+
+[MIT](LICENSE)，随便用。
