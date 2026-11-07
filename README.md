@@ -89,7 +89,10 @@ logs/              运行日志（运行后生成，不入库）
 
 - [GSMA SGP.22](https://www.gsma.com/solutions-and-impact/technologies/esim/gsma_resources/)：eSIM 远程配置（消费级）规范
 - NekokoLPA：9eSIM 蓝牙传输（NBLE）格式参考了其公开实现
-- 协议分析的原始笔记含个人设备信息，未放进仓库
+- [`参考资料JetsonAnalysis/`](参考资料JetsonAnalysis/)：开发前的原始分析笔记（个人号码、卡号、本机路径已脱敏；文中 `analysis/...` 路径指原分析工程，不在本仓库）
+  - [PROTOCOL.md](参考资料JetsonAnalysis/PROTOCOL.md)：9eSIM 蓝牙管理和 eSIM 配置下载的协议分析
+  - [README.md](参考资料JetsonAnalysis/README.md)：随身 WiFi 的硬件、运行架构和 goform 接口
+  - [capability-analysis.md](参考资料JetsonAnalysis/capability-analysis.md)：随身 WiFi 短信收发能力分析（其中 798021 实为发送失败的短信，见 docs/07）
 
 ## 接码平台（2026-11-07 新增）
 
