@@ -1,0 +1,5 @@
+-r requirements.txt
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart>=0.0.9
+mcp>=2.0          # MCP SDK v2 (MCPServer); `python -m esimble.platform mcp`

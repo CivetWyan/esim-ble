@@ -1,0 +1,8 @@
+.venv/
+data/
+logs/
+__pycache__/
+*.pyc
+*.egg-info/
+.DS_Store
+参考资料JetsonAnalysis/

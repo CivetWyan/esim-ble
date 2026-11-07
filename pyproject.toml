@@ -1,0 +1,19 @@
+[project]
+name = "esim-ble"
+version = "0.1.0"
+description = "Manage 9eSIM card profiles over macOS Bluetooth and read/send SMS through a ZTE-goform MiFi"
+requires-python = ">=3.10"
+dependencies = ["bleak>=0.22", "cryptography>=42"]
+
+[project.optional-dependencies]
+qr = ["opencv-python-headless>=4.8"]
+
+[project.scripts]
+esimble = "esimble.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["esimble*"]

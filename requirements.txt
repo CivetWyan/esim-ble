@@ -1,0 +1,3 @@
+bleak>=0.22
+cryptography>=42
+opencv-python-headless>=4.8   # optional: card add --qr

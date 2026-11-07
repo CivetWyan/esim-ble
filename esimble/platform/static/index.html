@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>eSIM 接码平台</title>
+<style>
+:root{
+  --primary:#3c96ca;--primary-d:#2f86bd;--primary-l:#e8f3fa;--bg:#f3f6f9;--surface:#fff;--fg:#1b1c1d;--fg2:#5f6b76;--line:#e3e8ee;
+  --ok:#00a854;--ok-l:#e3f8ec;--warn:#e69500;--warn-l:#fff6e0;--bad:#e5484d;--bad-l:#fdecec;--code-bg:#fff4cc;--code-fg:#7a4b00;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);--r:10px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --primary:#5ba4d4;--primary-d:#3a8ab8;--primary-l:#1a2e3d;--bg:#161718;--surface:#222324;--fg:#e8eaed;--fg2:#9aa3ad;--line:#33363a;
+  --ok:#3ecf8e;--ok-l:#163626;--warn:#f5b13d;--warn-l:#3a2e12;--bad:#ff6b6b;--bad-l:#3d1d1d;--code-bg:#3d3210;--code-fg:#ffd666;--shadow:none}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+a{color:var(--primary);text-decoration:none}
+svg.i{width:18px;height:18px;flex:none;fill:currentColor}
+
+/* layout */
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+aside{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:18px 20px 14px;font-weight:600;font-size:16px}
+.brand .logo{width:32px;height:32px;border-radius:8px;background:var(--primary);color:#fff;display:grid;place-items:center}
+nav{padding:6px 12px;flex:1;overflow:auto}
+nav .grp{font-size:12px;color:var(--fg2);padding:14px 10px 6px}
+nav a{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:8px;color:var(--fg2);margin-bottom:2px}
+nav a:hover{color:var(--primary)}
+nav a.act{background:var(--primary-l);color:var(--primary);font-weight:600}
+nav a .cnt{margin-left:auto;font-size:11px;background:var(--bad);color:#fff;border-radius:9px;padding:0 6px;font-weight:600}
+.side-foot{border-top:1px solid var(--line);padding:12px 16px;font-size:12px;color:var(--fg2);display:flex;flex-direction:column;gap:8px}
+.content{min-width:0;display:flex;flex-direction:column}
+.topbar{height:60px;display:flex;align-items:center;gap:14px;padding:0 28px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:4}
+.topbar h1{font-size:18px;margin:0;font-weight:600}
+.topbar .sp{flex:1}
+.page{padding:24px 28px 40px;max-width:1240px;width:100%}
+.menu-btn{display:none;background:none;border:0;color:var(--fg);padding:6px}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  aside{position:fixed;left:0;top:0;z-index:30;width:240px;transform:translateX(-100%);transition:.2s}
+  aside.open{transform:none;box-shadow:0 0 40px #0004}
+  .menu-btn{display:block}.page{padding:16px}.topbar{padding:0 16px}
+}
+
+/* components */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:20px}
+.card-h{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.card-h h3{margin:0;font-size:15px;font-weight:600}.card-h .sp{flex:1}
+.card-b{padding:16px 20px}
+.grid{display:grid;gap:20px}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g-side{grid-template-columns:320px minmax(0,1fr)}
+@media (max-width:1100px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g-side,.g2{grid-template-columns:1fr}}
+.kpi{padding:16px 18px;display:flex;gap:14px;align-items:center;margin:0}
+.kpi .ic{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:var(--primary-l);color:var(--primary);flex:none}
+.kpi .ic svg{width:22px;height:22px}
+.kpi .lab{font-size:12px;color:var(--fg2)}.kpi .val{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .sub{font-size:12px;color:var(--fg2)}
+.btn{font:inherit;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--primary);color:var(--primary)}
+.btn.pri{background:var(--primary);border-color:var(--primary);color:#fff}.btn.pri:hover{background:var(--primary-d)}
+.btn.danger{color:var(--bad)}.btn.danger:hover{border-color:var(--bad)}
+.btn.sm{height:28px;padding:0 10px;font-size:13px}.btn.lg{height:42px;padding:0 22px;font-size:15px}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+.tag{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:11px;font-size:12px;background:var(--primary-l);color:var(--primary);white-space:nowrap}
+.tag.ok{background:var(--ok-l);color:var(--ok)}.tag.warn{background:var(--warn-l);color:var(--warn)}.tag.bad{background:var(--bad-l);color:var(--bad)}.tag.mut{background:var(--bg);color:var(--fg2)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.pulse{animation:pl 1.4s infinite}@keyframes pl{50%{opacity:.3}}
+table{width:100%;border-collapse:collapse}
+th{font-weight:500;color:var(--fg2);font-size:12px;text-align:left;padding:10px 12px;background:var(--bg);white-space:nowrap}
+td{padding:12px;border-top:1px solid var(--line);vertical-align:middle}
+.tw{overflow-x:auto}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+.mut{color:var(--fg2)}.small{font-size:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.form{display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px 18px;align-items:center;max-width:760px}
+.form .hint{grid-column:2;margin-top:-8px;font-size:12px;color:var(--fg2)}
+@media (max-width:640px){.form{grid-template-columns:1fr}.form .hint{grid-column:1}}
+input,select,textarea{font:inherit;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);width:100%;outline:none}
+textarea{height:auto;min-height:80px;padding:8px 10px;resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-l)}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary)}
+.switch{position:relative;width:38px;height:22px;flex:none}
+.switch input{opacity:0;width:0;height:0}
+.switch span{position:absolute;inset:0;background:var(--line);border-radius:11px;cursor:pointer;transition:.15s}
+.switch span:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.switch input:checked+span{background:var(--primary)}.switch input:checked+span:before{transform:translateX(16px)}
+.empty{padding:36px;text-align:center;color:var(--fg2)}
+.alert{display:flex;gap:10px;padding:12px 14px;border-radius:8px;background:var(--warn-l);color:var(--fg);font-size:13px;margin-bottom:16px}
+.alert svg{color:var(--warn)}.alert.info{background:var(--primary-l)}.alert.info svg{color:var(--primary)}
+
+/* messages */
+.msg{padding:12px 20px;border-top:1px solid var(--line)}
+.msg:first-child{border-top:0}
+.msg .h{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--fg2)}
+.msg .h b{color:var(--fg);font-size:13px}
+.msg .body{white-space:pre-wrap;word-break:break-word;margin-top:4px}
+.code{font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:14px;background:var(--code-bg);color:var(--code-fg);padding:1px 8px;border-radius:6px;cursor:pointer}
+.code.big{font-size:30px;padding:4px 16px;letter-spacing:2px}
+.new{animation:fl 3s}@keyframes fl{0%{background:var(--code-bg)}100%{background:transparent}}
+
+/* receive */
+.numlist .it{display:flex;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;cursor:pointer;background:var(--surface)}
+.numlist .it:hover{border-color:var(--primary)}
+.numlist .it.sel{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-l)}
+.numlist .it .nm{font-weight:600}.numlist .it .sp{flex:1}
+.steps{display:flex;flex-direction:column;gap:0;margin:6px 0 4px}
+.step{display:flex;gap:12px;align-items:flex-start;position:relative;padding-bottom:16px}
+.step:not(:last-child):after{content:"";position:absolute;left:11px;top:24px;bottom:2px;width:2px;background:var(--line)}
+.step.done:not(:last-child):after{background:var(--ok)}
+.step .b{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);background:var(--surface);flex:none;font-size:12px;color:var(--fg2);z-index:1}
+.step.done .b{background:var(--ok);border-color:var(--ok);color:#fff}
+.step.cur .b{border-color:var(--primary);color:var(--primary)}
+.step.fail .b{background:var(--bad);border-color:var(--bad);color:#fff}
+.step .t{padding-top:2px}.step .t small{color:var(--fg2);margin-left:6px}
+.ready{border-radius:10px;padding:18px 20px;background:var(--ok-l);display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.ready .big{font-size:18px;font-weight:600}
+.waiting{border-radius:10px;padding:18px 20px;background:var(--primary-l);display:flex;gap:14px;align-items:center}
+.spin{width:22px;height:22px;border:3px solid var(--primary-l);border-top-color:var(--primary);border-radius:50%;animation:sp 0.9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+dialog{border:0;border-radius:12px;background:var(--surface);color:var(--fg);width:min(560px,94vw);padding:0;box-shadow:0 20px 60px #0003}
+dialog::backdrop{background:#0007}
+dialog .card-b{padding:20px}
+dialog .form{grid-template-columns:110px minmax(0,1fr)}
+.dlg-f{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--line)}
+#toast{position:fixed;right:20px;top:72px;display:flex;flex-direction:column;gap:8px;z-index:50}
+#toast div{background:var(--fg);color:var(--surface);padding:10px 14px;border-radius:8px;max-width:420px;font-size:13px;box-shadow:0 6px 20px #0003}
+#toast div.err{background:var(--bad);color:#fff}
+.ev{display:flex;gap:10px;padding:9px 20px;border-top:1px solid var(--line);font-size:13px;align-items:baseline}
+.ev:first-child{border-top:0}
+pre.cfg{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font-size:12.5px;margin:6px 0 0}
+</style>
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-dash" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></symbol>
+  <symbol id="i-recv" viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></symbol>
+  <symbol id="i-sim" viewBox="0 0 24 24"><path d="M18 2h-8L4 8v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2zM9 19H7v-2h2v2zm8 0h-2v-2h2v2zm-8-4H7v-4h2v4zm4 4h-2v-4h2v4zm0-6h-2v-2h2v2zm4 2h-2v-4h2v4z"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V6a2 2 0 00-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></symbol>
+  <symbol id="i-set" viewBox="0 0 24 24"><path d="M19.14 12.94a7.07 7.07 0 000-1.88l2.03-1.58a.5.5 0 00.12-.61l-1.92-3.32a.5.5 0 00-.59-.22l-2.39.96a7.03 7.03 0 00-1.62-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.49.42l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.5.5 0 00-.59.22L2.7 8.87a.5.5 0 00.12.61l2.03 1.58a7.07 7.07 0 000 1.88l-2.03 1.58a.5.5 0 00-.12.61l1.92 3.32c.13.22.39.3.59.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.49.42h3.84c.25 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.5.5 0 00-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.24 4.24 0 00-6 0zm-4-4l2 2a7.07 7.07 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7a2 2 0 00-2-2h-2V3h-2v2h-2V3H9v2H7a2 2 0 00-2 2v2H3v2h2v2H3v2h2v2a2 2 0 002 2h2v2h2v-2h2v2h2v-2h2a2 2 0 002-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2z"/></symbol>
+</svg>
+
+<div class="app">
+  <aside id="side">
+    <div class="brand"><div class="logo"><svg class="i"><use href="#i-sim"/></svg></div>eSIM 接码平台</div>
+    <nav id="nav">
+      <a href="#/overview" data-p="overview"><svg class="i"><use href="#i-dash"/></svg>概览</a>
+      <a href="#/receive" data-p="receive"><svg class="i"><use href="#i-recv"/></svg>收码<span class="cnt" id="navRecv" hidden></span></a>
+      <div class="grp">管理</div>
+      <a href="#/numbers" data-p="numbers"><svg class="i"><use href="#i-sim"/></svg>号卡管理</a>
+      <a href="#/messages" data-p="messages"><svg class="i"><use href="#i-msg"/></svg>短信记录<span class="cnt" id="navNew" hidden></span></a>
+      <a href="#/send" data-p="send"><svg class="i"><use href="#i-send"/></svg>发送短信</a>
+      <div class="grp">系统</div>
+      <a href="#/settings" data-p="settings"><svg class="i"><use href="#i-set"/></svg>系统设置</a>
+      <a href="#/events" data-p="events"><svg class="i"><use href="#i-log"/></svg>事件日志</a>
+      <a href="#/access" data-p="access"><svg class="i"><use href="#i-api"/></svg>接入 API / MCP</a>
+    </nav>
+    <div class="side-foot">
+      <div id="sideStatus">…</div>
+      <a href="/logout" class="row mut" style="gap:6px"><svg class="i"><use href="#i-out"/></svg>退出登录</a>
+    </div>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <button class="menu-btn" id="menuBtn"><svg class="i"><use href="#i-menu"/></svg></button>
+      <h1 id="title">概览</h1>
+      <span class="sp"></span>
+      <span id="topStatus"></span>
+    </div>
+    <div class="page" id="page"></div>
+  </div>
+</div>
+
+<dialog id="dlg"></dialog>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon = (n, cls='i') => `<svg class="${cls}"><use href="#i-${n}"/></svg>`;
+const S = {status: null, nums: [], route: 'overview', msgCursor: 0, recvSel: null, unseen: 0, msgFilter: {number: '', direction: 'in', q: ''}, msgOldest: 0};
+
+async function api(method, path, body, isForm) {
+  const opt = {method, headers: {'X-Requested-With': 'esim-admin'}};
+  if (body !== undefined) { if (isForm) opt.body = body; else { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; } }
+  const r = await fetch('/api/v1' + path, opt);
+  if (r.status === 401) { location.href = '/'; throw new Error('未登录'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail || j));
+  return j;
+}
+function toast(t, err) { const d = document.createElement('div'); d.textContent = t; if (err) d.className = 'err'; $('#toast').append(d); setTimeout(() => d.remove(), err ? 8000 : 3500); }
+const now = () => Date.now() / 1000;
+const dur = s => { s = Math.max(0, Math.round(s)); return s < 60 ? s + ' 秒' : s < 3600 ? Math.floor(s/60) + ' 分 ' + (s%60) + ' 秒' : Math.floor(s/3600) + ' 小时 ' + Math.floor(s%3600/60) + ' 分'; };
+const ago = ts => ts ? dur(now() - ts) + '前' : '-';
+const hm = iso => (iso || '').slice(5, 19).replace('T', ' ');
+const numName = p => p ? (p.label || p.card_nickname || p.card_name || p.iccid) : '-';
+const byIccid = i => S.nums.find(n => n.iccid === i);
+const PHASE = {online:['在线','ok'], switching:['切换中','warn'], rebooting:['随身WiFi重启中','warn'], waiting_network:['等待注网','warn'],
+  no_service:['无服务','bad'], mifi_offline:['随身WiFi不可达','bad'], error:['错误','bad'], idle:['无受管号码在线','warn'], starting:['启动中','mut']};
+const phaseTag = () => { const [t, c] = PHASE[S.status?.phase] || [S.status?.phase || '…', 'mut']; return `<span class="tag ${c}"><span class="dot ${c === 'warn' ? 'pulse' : ''}"></span>${t}</span>`; };
+const recvHold = () => (S.status?.holds || []).find(h => h.reason === 'manual');
+
+/* ----------------------------------------------------------- data refresh */
+async function refresh() {
+  S.status = await api('GET', '/status');
+  S.nums = await api('GET', '/numbers?include_removed=' + (S.showRemoved ? 'true' : 'false'));
+  const cur = S.status.current;
+  $('#topStatus').innerHTML = `${phaseTag()} <span class="small" style="margin-left:8px">${cur ? '当前在线：<b>' + esc(cur.label || cur.iccid) + '</b> ' + esc(cur.msisdn || '') : ''}</span>`;
+  const m = S.status.modem || {};
+  $('#sideStatus').innerHTML = `<div class="row" style="gap:6px">${icon('wifi')}${esc(m.network_provider || '-')} ${esc(m.network_type || '')}</div><div class="mut">上次收取 ${ago(S.status.last_poll_at)}</div>`;
+  const h = recvHold();
+  $('#navRecv').hidden = !h; if (h) $('#navRecv').textContent = '进行中';
+  $('#navNew').hidden = !S.unseen; $('#navNew').textContent = S.unseen;
+}
+async function pollMessages() {
+  const rows = await api('GET', '/messages?since_id=' + S.msgCursor + '&limit=200&direction=');
+  if (!rows.length) return [];
+  const first = S.msgCursor === 0;
+  S.msgCursor = Math.max(S.msgCursor, ...rows.map(r => r.id));
+  if (!first) {
+    const inc = rows.filter(r => r.direction === 'in');
+    inc.forEach(m => toast(`新短信 · ${numName(byIccid(m.iccid))}：${m.code ? '验证码 ' + m.code : m.body.slice(0, 30)}`));
+    if (S.route !== 'messages') S.unseen += inc.length;
+  }
+  return first ? [] : rows;
+}
+
+/* ------------------------------------------------------------------ pages */
+const PAGES = {};
+const TITLES = {overview:'概览', receive:'收码', numbers:'号卡管理', messages:'短信记录', send:'发送短信', settings:'系统设置', events:'事件日志', access:'接入 API / MCP'};
+
+function render() {
+  const p = S.route;
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('act', a.dataset.p === p));
+  $('#title').textContent = TITLES[p];
+  PAGES[p].render();
+}
+function go() {
+  const r = (location.hash.replace('#/', '') || 'overview').split('?')[0];
+  S.route = PAGES[r] ? r : 'overview';
+  if (S.route === 'messages') S.unseen = 0;
+  $('#side').classList.remove('open');
+  $('#page').innerHTML = '';
+  render();
+}
+
+function msgHtml(m, isNew) {
+  const p = byIccid(m.iccid);
+  const dir = m.direction === 'in' ? '<span class="tag ok">收到</span>' : `<span class="tag mut">发出 · ${esc(m.status)}</span>`;
+  const code = m.code ? `<span class="code" data-copy="${esc(m.code)}" title="点击复制">${esc(m.code)}</span>` : '';
+  const attr = m.attribution === 'startup' ? '<span class="tag warn" title="平台启动时设备里已有的短信，按启动时在线号码推断">归属待确认</span>'
+    : m.attribution === 'unknown' ? '<span class="tag bad">未知号码</span>' : '';
+  return `<div class="msg ${isNew ? 'new' : ''}" data-id="${m.id}"><div class="h">${dir}<b>${esc(m.peer)}</b><span>→ ${esc(p ? numName(p) : (m.iccid || '?'))}</span>${code}${attr}
+    <span style="flex:1"></span><span title="设备时间 ${esc(m.sms_time)}">${esc(hm(m.received_at))}</span></div><div class="body">${esc(m.body)}</div></div>`;
+}
+
+/* overview */
+PAGES.overview = {
+  async render() {
+    const s = S.status, m = s.modem || {}, cap = s.capacity || {}, cur = s.current, home = s.home, h = recvHold();
+    const kpi = (ic, lab, val, sub) => `<div class="card kpi"><div class="ic">${icon(ic)}</div><div style="min-width:0"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div></div>`;
+    let banner = '';
+    if (!home) banner = `<div class="alert">${icon('warn')}<div>还没有设置常驻号。常驻号会一直在线，短信实时到达。<a href="#/settings">去设置</a></div></div>`;
+    else if (cur && cur.iccid !== home.iccid && !h && !s.switch_target) banner = '';
+    $('#page').innerHTML = `${banner}
+      <div class="grid g4">
+        ${kpi('sim', '当前在线号码', cur ? esc(cur.label || cur.iccid) : '—', cur ? esc(cur.msisdn || cur.provider || '') + (home && cur.iccid === home.iccid ? ' · 常驻号' : '') : esc(s.phase_detail || ''))}
+        ${kpi('wifi', '网络', esc((m.network_provider || '-') + ' ' + (m.network_type || '')), '信号 ' + esc(m.signalbar || '-') + '/5')}
+        ${kpi('chip', '运行阶段', phaseTag(), esc(s.phase_detail || '') )}
+        ${kpi('store', '随身WiFi短信存储', cap.total ? cap.used + ' / ' + cap.total : '-', '入库 ' + s.stats.stored + ' · 已删除 ' + s.stats.deleted)}
+      </div>
+      <div class="grid g2" style="margin-top:20px">
+        <div class="card" style="margin:0"><div class="card-h"><h3>号卡</h3><span class="sp"></span><a class="btn sm" href="#/numbers">管理</a></div>
+          <div class="card-b" style="padding:6px 20px">${S.nums.filter(n => n.on_card).map(n => `
+            <div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)">
+              <div style="flex:1;min-width:0"><b>${esc(numName(n))}</b> ${n.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}<div class="small mut">${esc(n.msisdn || '未填号码')} · ${esc(n.card_provider)}</div></div>
+              ${n.online ? '<span class="tag ok"><span class="dot"></span>在线</span>' : '<span class="tag mut">离线</span>'}
+              <a class="btn sm ${n.online ? '' : 'pri'}" href="#/receive" data-pick="${esc(n.iccid)}">收码</a></div>`).join('') || '<div class="empty">暂无号卡</div>'}
+          </div></div>
+        <div class="card" style="margin:0"><div class="card-h"><h3>最近短信</h3><span class="sp"></span><a class="btn sm" href="#/messages">全部</a></div>
+          <div id="ovMsgs">${S.ovMsgs || '<div class="empty">加载中…</div>'}</div></div>
+      </div>`;
+    const rows = await api('GET', '/messages?direction=in&limit=6');
+    S.ovMsgs = rows.map(m => msgHtml(m)).join('') || '<div class="empty">暂无短信</div>';
+    const el = $('#ovMsgs'); if (el) el.innerHTML = S.ovMsgs;
+  },
+  tick() { if (!document.querySelector('dialog[open]')) this.render(); },
+};
+
+/* receive */
+PAGES.receive = {
+  render() {
+    const h = recvHold();
+    if (h) S.recvSel = h.iccid;
+    if (!S.recvSel || !byIccid(S.recvSel)) S.recvSel = (S.nums.find(n => n.on_card && n.online) || S.nums.find(n => n.on_card) || {}).iccid;
+    $('#page').innerHTML = `<div class="grid g-side">
+      <div><div class="small mut" style="margin:0 0 10px">选择要收短信的号码</div><div class="numlist" id="rcvList"></div>
+        <div class="alert info" style="margin-top:6px">${icon('info')}<div>同一时间只有一个号码在线。<b>只有在线的号码</b>能实时收短信；发给离线号码的短信，可能延迟，也可能丢失。</div></div></div>
+      <div><div class="card"><div class="card-h"><h3 id="rcvTitle"></h3><span class="sp"></span><span id="rcvActs" class="row"></span></div><div class="card-b" id="rcvBody"></div></div>
+        <div class="card"><div class="card-h"><h3>本号码收到的短信</h3><span class="sp"></span><span class="small mut">实时刷新</span></div><div id="rcvMsgs"></div></div></div></div>`;
+    this.update(true);
+  },
+  async update(full) {
+    const s = S.status, h = recvHold(), sel = byIccid(S.recvSel);
+    $('#rcvList').innerHTML = S.nums.filter(n => n.on_card).map(n => `<div class="it ${n.iccid === S.recvSel ? 'sel' : ''}" data-sel="${esc(n.iccid)}">
+      <div style="min-width:0"><div class="nm">${esc(numName(n))} ${n.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}</div><div class="small mut mono">${esc(n.msisdn || '未填号码')}</div></div><span class="sp"></span>
+      ${n.online ? '<span class="tag ok"><span class="dot"></span>在线</span>' : (s.switch_target === n.iccid ? '<span class="tag warn"><span class="dot pulse"></span>切换中</span>' : '<span class="tag mut">离线</span>')}</div>`).join('');
+    if (!sel) { $('#rcvBody').innerHTML = '<div class="empty">暂无号卡</div>'; return; }
+    $('#rcvTitle').innerHTML = esc(numName(sel)) + ' <span class="mono small mut">' + esc(sel.msisdn || '') + '</span>';
+    const mine = h && h.iccid === sel.iccid;
+    const online = sel.online;
+    const ls = s.last_switch || {};
+    let acts = '', body = '';
+    if (mine) acts = `<button class="btn sm" data-ext="${h.id}">延长 10 分钟</button><button class="btn sm danger" data-end="${h.id}">结束${s.home && s.home.iccid !== sel.iccid ? '并切回常驻号' : ''}</button>`;
+    if (online) {
+      body = `<div class="ready">${icon('recv')}<div style="flex:1;min-width:220px"><div class="big">在线，现在可以发短信到 <span class="mono">${esc(sel.msisdn || '这个号码')}</span></div>
+        <div class="small mut">${mine ? '收码会话剩余 ' + dur(h.until - now()) + '，到期后' + (s.home && s.home.iccid !== sel.iccid ? '自动切回常驻号' : '结束') : (sel.is_home ? '这是常驻号，会一直保持在线' : '没有收码会话时可能被切走，建议点"开始收码"')}</div></div>
+        ${!mine && !sel.is_home ? `<button class="btn pri" data-start="${esc(sel.iccid)}">开始收码</button>` : ''}</div>`;
+      if (mine && ls.target === sel.iccid && ls.ok) body += `<div class="small mut" style="margin-top:10px">本次切换用时 ${dur(ls.finished - ls.started)}</div>`;
+    } else if (mine || s.switch_target === sel.iccid) {
+      const STEPS = [['drain','收取当前号码的短信'],['enable','蓝牙启用号码'],['reboot','重启随身 WiFi'],['sim','识别新号码'],['network','注册网络'],['sms','短信模块就绪'],['online','在线']];
+      const on = ls.target === sel.iccid ? (ls.steps || []) : [];
+      const doneKeys = new Set(on.map(x => x.key));
+      const failed = ls.target === sel.iccid && ls.ok === false;
+      let curIdx = STEPS.findIndex(([k]) => !doneKeys.has(k));
+      const started = ls.target === sel.iccid ? ls.started : null;
+      body = `<div class="waiting">${failed ? icon('warn') : '<div class="spin"></div>'}<div><div style="font-weight:600">${failed ? '切换失败' : (s.switch_target === sel.iccid ? '正在切换到这个号码…' : '排队中，等当前操作完成后切换')}</div>
+        <div class="small mut">${started ? '已用时 ' + dur((ls.finished || now()) - started) + ' · 通常 40 秒左右' : '马上开始'}${failed ? ' · ' + esc(ls.error) : ''}</div></div></div>
+        <div class="steps" style="margin-top:18px">${STEPS.map(([k, t], i) => {
+          const st = on.find(x => x.key === k);
+          const cls = st ? 'done' : (failed && i === curIdx ? 'fail' : (i === curIdx && started ? 'cur' : ''));
+          return `<div class="step ${cls}"><div class="b">${st ? '✓' : (cls === 'fail' ? '!' : i + 1)}</div><div class="t">${esc(st ? st.text : t)}${st && started ? '<small>+' + Math.round(st.ts - started) + 's</small>' : ''}</div></div>`;
+        }).join('')}</div>
+        <div class="small mut">切换完成前，<b>先不要</b>往这个号发短信。</div>`;
+    } else {
+      body = `<div style="text-align:center;padding:26px 10px"><div style="font-size:16px;font-weight:600;margin-bottom:6px">这个号码当前离线</div>
+        <div class="mut small" style="margin-bottom:18px">点击后会切换到这个号码（约 40 秒），期间当前在线的号码会短暂离线。<br>默认保持 ${Math.round(s.settings.wait_hold_seconds / 60)} 分钟，结束后${s.home ? '自动切回常驻号 ' + esc(s.home.label || '') : '停留在这个号码'}。</div>
+        <button class="btn pri lg" data-start="${esc(sel.iccid)}">${icon('recv')}开始收码</button></div>`;
+    }
+    $('#rcvActs').innerHTML = acts;
+    $('#rcvBody').innerHTML = body;
+    if (full || this._sel !== sel.iccid || this._last !== S.msgCursor) {
+      this._sel = sel.iccid; this._last = S.msgCursor;
+      const rows = await api('GET', '/messages?direction=in&limit=20&number=' + encodeURIComponent(sel.iccid));
+      const el = $('#rcvMsgs'); if (!el) return;
+      const latest = rows[0];
+      const fresh = latest && h && h.iccid === sel.iccid && latest.received_at && (new Date(latest.received_at).getTime() / 1000 > h.created);
+      el.innerHTML = (fresh && latest.code ? `<div style="padding:18px 20px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;flex-wrap:wrap"><span class="small mut">最新验证码</span><span class="code big" data-copy="${esc(latest.code)}">${esc(latest.code)}</span><span class="small mut">点击复制 · 来自 ${esc(latest.peer)}</span></div>` : '')
+        + (rows.map(m => msgHtml(m)).join('') || '<div class="empty">暂无短信</div>');
+    }
+  },
+  tick() { this.update(false); },
+};
+
+/* numbers */
+PAGES.numbers = {
+  render() {
+    $('#page').innerHTML = `<div class="card"><div class="card-h"><h3>卡上的号码</h3><span class="sp"></span>
+      <label class="row small mut" style="gap:6px;margin-right:8px"><input type="checkbox" id="showRemoved" ${S.showRemoved ? 'checked' : ''}>显示已删除</label>
+      <button class="btn" id="refreshCard">从卡上刷新</button><button class="btn pri" id="addBtn">＋ 新增号卡</button></div>
+      <div class="tw"><table><thead><tr><th>名称</th><th>手机号</th><th>运营商 / 配置</th><th>ICCID</th><th>状态</th><th>短信</th><th style="text-align:right">操作</th></tr></thead><tbody id="numRows"></tbody></table></div></div>
+      <div class="alert info">${icon('info')}<div>新增：粘贴激活码或上传二维码，通过蓝牙写入卡（约 40 秒）。删除：从卡上永久移除，不可撤销；在线的号码不能删除。卡上昵称会写入卡，其他信息只保存在平台里。</div></div>`;
+    $('#showRemoved').onchange = async e => { S.showRemoved = e.target.checked; await refresh(); this.tick(); };
+    $('#refreshCard').onclick = async e => { const b = e.target; b.disabled = true; b.textContent = '读取中…'; try { const r = await api('POST', '/card/refresh'); toast(`读取成功：${r.profiles.length} 个号码，剩余 ${(r.free_nvm / 1024).toFixed(1)} KB`); await refresh(); this.tick(); } catch (err) { toast(err.message, true); } b.disabled = false; b.textContent = '从卡上刷新'; };
+    $('#addBtn').onclick = openAdd;
+    this.tick();
+  },
+  tick() {
+    const el = $('#numRows'); if (!el) return;
+    el.innerHTML = S.nums.map(p => {
+      let st = !p.on_card ? '<span class="tag bad">已删除</span>' : p.online ? '<span class="tag ok"><span class="dot"></span>在线</span>'
+        : S.status.switch_target === p.iccid ? '<span class="tag warn"><span class="dot pulse"></span>切换中</span>' : '<span class="tag mut">离线</span>';
+      if (p.last_switch_error) st += ` <span class="tag bad" title="${esc(p.last_switch_error)}">上次切换失败</span>`;
+      const tags = (p.tags || '').split(',').filter(Boolean).map(t => `<span class="tag mut">${esc(t.trim())}</span>`).join(' ');
+      return `<tr><td><div class="row" style="gap:6px"><b>${esc(numName(p))}</b>${p.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}${tags}</div>
+          ${p.notes ? `<div class="small mut">${esc(p.notes)}</div>` : ''}${p.card_nickname ? `<div class="small mut">卡上昵称：${esc(p.card_nickname)}</div>` : ''}</td>
+        <td class="mono">${esc(p.msisdn || '—')}</td>
+        <td>${esc(p.card_provider)}<div class="small mut">${esc(p.card_name)}</div></td>
+        <td class="mono">${esc(p.iccid)}</td><td>${st}</td>
+        <td><a href="#/messages" data-filter="${esc(p.iccid)}">${p.message_count}</a></td>
+        <td style="text-align:right"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap">${p.on_card ? `
+          <a class="btn sm" href="#/receive" data-pick="${esc(p.iccid)}">收码</a>
+          <button class="btn sm" data-edit="${esc(p.iccid)}">编辑</button>
+          ${p.is_home ? '' : `<button class="btn sm" data-home="${esc(p.iccid)}">设为常驻</button>`}
+          <button class="btn sm danger" data-del="${esc(p.iccid)}" ${p.modem_active ? 'disabled title="在线号码不能删除"' : ''}>删除</button>` : ''}</div></td></tr>`;
+    }).join('') || '<tr><td colspan="7" class="empty">暂无号卡。点“从卡上刷新”读取卡上的号码，或者“新增号卡”。</td></tr>';
+  },
+};
+
+function openAdd() {
+  const d = $('#dlg');
+  d.innerHTML = `<form method="dialog" id="addForm"><div class="card-h"><h3>新增号卡</h3></div><div class="card-b"><div class="form">
+    <span class="mut">激活码</span><input name="activation_code" placeholder="LPA:1$smdp.example.com$MATCHING-ID">
+    <span class="mut">或二维码</span><div class="row"><input type="file" name="qr" accept="image/*" id="qrFile" style="height:auto;padding:6px"><span id="qrInfo" class="small mut"></span></div>
+    <span class="mut">确认码</span><input name="confirmation_code" placeholder="可选">
+    <span class="mut">卡上昵称</span><input name="nickname" placeholder="可选，写入卡里">
+    <span class="mut">手机号</span><input name="msisdn" placeholder="可选；上线后可能自动读出">
+    <span class="mut">标签</span><input name="tags" placeholder="可选，逗号分隔">
+    <span class="mut">备注</span><input name="notes">
+  </div><p class="small mut" style="margin:14px 0 0">安装约 40 秒，期间不要断开蓝牙或拔卡。新装的号码是离线状态，在“收码”里让它上线。</p></div>
+  <div class="dlg-f"><button class="btn" value="cancel" formnovalidate>取消</button><button class="btn pri" id="addGo" value="go">安装</button></div></form>`;
+  d.showModal();
+  $('#qrFile').onchange = async () => {
+    const f = $('#qrFile').files[0]; if (!f) return; const fd = new FormData(); fd.append('qr', f);
+    try { const r = await api('POST', '/qr/decode', fd, true); $('#addForm').elements.activation_code.value = r.activation_code; $('#qrInfo').textContent = '✓ ' + r.smdp; } catch (err) { $('#qrInfo').textContent = '✗ ' + err.message; }
+  };
+  $('#addForm').onsubmit = async e => {
+    if (e.submitter && e.submitter.value !== 'go') return;
+    e.preventDefault();
+    const fd = new FormData($('#addForm'));
+    if (!fd.get('activation_code')) return toast('请填写激活码或上传二维码', true);
+    fd.delete('qr');
+    const b = $('#addGo'); b.disabled = true; b.textContent = '安装中（约 40 秒）…';
+    try { const r = await api('POST', '/numbers', fd, true); toast('安装成功：' + r.iccid); d.close(); await refresh(); render(); }
+    catch (err) { toast('安装失败：' + err.message, true); b.disabled = false; b.textContent = '安装'; }
+  };
+}
+function openEdit(iccid) {
+  const p = byIccid(iccid), d = $('#dlg');
+  d.innerHTML = `<form method="dialog" id="editForm"><div class="card-h"><h3>编辑号卡</h3><span class="sp"></span><span class="mono small mut">${esc(p.iccid)}</span></div><div class="card-b"><div class="form">
+    <span class="mut">显示名称</span><input name="label">
+    <span class="mut">手机号</span><input name="msisdn" placeholder="+995…">
+    <span class="mut">标签</span><input name="tags" placeholder="逗号分隔">
+    <span class="mut">备注</span><textarea name="notes"></textarea>
+    <span class="mut">卡上昵称</span><input name="card_nickname"><div class="hint">修改后会通过蓝牙写入卡（约 10 秒）</div>
+  </div></div><div class="dlg-f"><button class="btn" value="cancel" formnovalidate>取消</button><button class="btn pri" value="go" id="editGo">保存</button></div></form>`;
+  const f = $('#editForm');
+  for (const k of ['label','msisdn','tags','notes','card_nickname']) f.elements[k].value = p[k] ?? '';
+  d.showModal();
+  f.onsubmit = async e => {
+    if (e.submitter && e.submitter.value !== 'go') return;
+    e.preventDefault();
+    const b = {}; for (const k of ['label','msisdn','tags','notes']) b[k] = f.elements[k].value;
+    if (f.elements.card_nickname.value !== (p.card_nickname || '')) b.card_nickname = f.elements.card_nickname.value;
+    $('#editGo').disabled = true;
+    try { await api('PATCH', '/numbers/' + p.iccid, b); toast('已保存' + (b.card_nickname !== undefined ? '，昵称已写入卡' : '')); d.close(); await refresh(); render(); }
+    catch (err) { toast(err.message, true); $('#editGo').disabled = false; }
+  };
+}
+
+/* messages */
+PAGES.messages = {
+  render() {
+    const F = S.msgFilter;
+    $('#page').innerHTML = `<div class="card"><div class="card-h" style="flex-wrap:wrap">
+        <select id="fNum" style="width:200px"><option value="">全部号码</option>${S.nums.filter(n => n.on_card || n.message_count).map(n => `<option value="${esc(n.iccid)}">${esc(numName(n))}</option>`).join('')}</select>
+        <select id="fDir" style="width:110px"><option value="in">收到</option><option value="out">发出</option><option value="">全部</option></select>
+        <input id="fText" placeholder="搜索正文或对方号码" style="max-width:280px">
+        <span class="sp"></span><button class="btn" id="pollNow">立即收取</button></div>
+      <div id="msgList"><div class="empty">加载中…</div></div>
+      <div class="card-b" style="text-align:center;border-top:1px solid var(--line)"><button class="btn sm" id="more">加载更多</button></div></div>`;
+    $('#fNum').value = F.number; $('#fDir').value = F.direction; $('#fText').value = F.q;
+    $('#fNum').onchange = $('#fDir').onchange = () => { F.number = $('#fNum').value; F.direction = $('#fDir').value; this.load(); };
+    let t; $('#fText').oninput = () => { clearTimeout(t); t = setTimeout(() => { F.q = $('#fText').value.trim(); this.load(); }, 300); };
+    $('#pollNow').onclick = async () => { await api('POST', '/poll'); toast('已触发收取'); };
+    $('#more').onclick = () => this.load(true);
+    this.load();
+  },
+  q(extra) {
+    const F = S.msgFilter, q = new URLSearchParams({number: F.number, direction: F.direction, limit: 50, ...extra});
+    if (F.q) { if (/^\+?\d{3,}$/.test(F.q)) q.set('sender', F.q); else q.set('contains', F.q); }
+    return '/messages?' + q;
+  },
+  async load(more) {
+    const rows = await api('GET', this.q(more ? {before_id: S.msgOldest} : {}));
+    if (rows.length) S.msgOldest = Math.min(...rows.map(r => r.id));
+    const el = $('#msgList'); if (!el) return;
+    if (more) el.insertAdjacentHTML('beforeend', rows.map(m => msgHtml(m)).join(''));
+    else { el.innerHTML = rows.map(m => msgHtml(m)).join('') || '<div class="empty">暂无短信</div>'; this._top = rows.length ? rows[0].id : 0; }
+    $('#more').style.display = rows.length >= 50 ? '' : 'none';
+  },
+  async onNew(rows) {
+    const el = $('#msgList'); if (!el) return;
+    const fresh = await api('GET', this.q({}));
+    const add = fresh.filter(r => r.id > (this._top || 0));
+    if (add.length) { if (!this._top) el.innerHTML = ''; el.insertAdjacentHTML('afterbegin', add.map(m => msgHtml(m, true)).join('')); this._top = Math.max(...add.map(r => r.id)); }
+  },
+};
+
+/* send */
+PAGES.send = {
+  render() {
+    const on = S.nums.filter(n => n.online);
+    $('#page').innerHTML = `<div class="card"><div class="card-h"><h3>发送短信</h3></div><div class="card-b"><div class="form">
+      <span class="mut">发送号码</span><select id="sFrom">${on.map(n => `<option value="${esc(n.iccid)}">${esc(numName(n))} ${esc(n.msisdn || '')}</option>`).join('') || '<option value="">没有在线的号码</option>'}</select>
+      <div class="hint">只能从当前在线的号码发送。要用别的号码，先到“收码”让它上线。</div>
+      <span class="mut">对方号码</span><input id="sTo" placeholder="+8613800000000">
+      <span class="mut">内容</span><textarea id="sText" maxlength="70" placeholder="单条短信，最多 70 字"></textarea>
+      <div class="hint" id="sCount">0 / 70</div>
+      <span></span><div class="row"><button class="btn pri" id="sendBtn" ${on.length ? '' : 'disabled'}>${icon('send')}发送</button><span class="small mut">只发一次，不自动重发；“accepted”只代表基带已受理</span></div>
+    </div></div></div>`;
+    $('#sText').oninput = () => $('#sCount').textContent = $('#sText').value.length + ' / 70';
+    $('#sendBtn').onclick = async () => {
+      const to = $('#sTo').value.trim(), text = $('#sText').value;
+      if (!to || !text) return toast('请填写对方号码和内容', true);
+      if (!confirm(`从 ${$('#sFrom').selectedOptions[0]?.textContent} 发送到 ${to}？`)) return;
+      const b = $('#sendBtn'); b.disabled = true;
+      try { const r = await api('POST', '/send', {number: $('#sFrom').value, to, text}); toast('结果：' + r.outcome, r.outcome !== 'accepted'); $('#sText').value = ''; }
+      catch (err) { toast(err.message, true); }
+      b.disabled = false;
+    };
+  },
+};
+
+/* settings */
+PAGES.settings = {
+  render() {
+    const st = S.status.settings, nums = S.nums.filter(n => n.on_card);
+    const sw = (k, label, hint) => `<span class="mut">${label}</span><label class="row"><span class="switch"><input type="checkbox" id="st_${k}" ${st[k] ? 'checked' : ''}><span></span></span><span class="small mut">${hint}</span></label>`;
+    const num = (k, label, unit, hint) => `<span class="mut">${label}</span><div class="row" style="flex-wrap:nowrap"><input type="number" id="st_${k}" value="${st[k]}" style="width:120px"><span class="mut">${unit}</span></div>${hint ? `<div class="hint">${hint}</div>` : ''}`;
+    $('#page').innerHTML = `
+      <div class="card"><div class="card-h"><h3>号码调度</h3></div><div class="card-b"><div class="form">
+        <span class="mut">常驻号</span><select id="st_home_iccid"><option value="">（不设置）</option>${nums.map(n => `<option value="${esc(n.iccid)}" ${n.iccid === st.home_iccid ? 'selected' : ''}>${esc(numName(n))} ${esc(n.msisdn || '')}</option>`).join('')}</select>
+        <div class="hint">常驻号平时一直在线，短信实时到达。收码会话结束后自动切回常驻号。</div>
+        ${num('wait_hold_seconds', '收码保持', '秒', '点“开始收码”或 AI 等码时，号码保持在线的时长')}
+        ${num('switch_timeout_seconds', '切号超时', '秒', '')}
+        ${sw('rotation_enabled', '自动轮询', '所有号码轮流上线（不推荐）。离线的号码收不到实时短信，可能丢信息')}
+        ${num('dwell_seconds', '轮询停留', '秒', '仅在开启自动轮询时生效')}
+      </div></div></div>
+      <div class="card"><div class="card-h"><h3>短信收取</h3></div><div class="card-b"><div class="form">
+        ${num('poll_seconds', '收取间隔', '秒', '')}
+        ${sw('delete_after_store', '入库后删除', '短信写入平台后从随身 WiFi 删除（设备最多存 20 条）')}
+        ${sw('api_allow_send', 'API 发短信', '允许 REST / SDK / MCP 发短信；修改后需要重启 MCP 客户端')}
+      </div></div></div>
+      <div class="row"><button class="btn pri" id="saveSettings">保存设置</button></div>`;
+    $('#saveSettings').onclick = async () => {
+      const b = {home_iccid: $('#st_home_iccid').value};
+      for (const k of ['dwell_seconds','poll_seconds','switch_timeout_seconds','wait_hold_seconds']) b[k] = +$('#st_' + k).value;
+      for (const k of ['delete_after_store','api_allow_send','rotation_enabled']) b[k] = $('#st_' + k).checked;
+      if (b.rotation_enabled && !st.rotation_enabled && !confirm('开启自动轮询后，不在线的号码收不到实时短信，可能丢信息。确定开启？')) return;
+      try { await api('PATCH', '/settings', b); toast('设置已保存'); await refresh(); } catch (err) { toast(err.message, true); }
+    };
+  },
+};
+
+/* events */
+PAGES.events = {
+  async render() {
+    $('#page').innerHTML = `<div class="card"><div class="card-h"><h3>最近事件</h3><span class="sp"></span><button class="btn sm" id="evR">刷新</button></div><div id="evList"></div></div>`;
+    $('#evR').onclick = () => this.render();
+    const ev = await api('GET', '/events?limit=200');
+    $('#evList').innerHTML = ev.map(e => `<div class="ev"><span class="mut mono" style="white-space:nowrap">${esc(hm(e.ts))}</span><span class="tag ${e.level === 'error' ? 'bad' : e.level === 'warning' ? 'warn' : 'mut'}">${esc(e.kind)}</span><span>${esc(e.message)}</span></div>`).join('') || '<div class="empty">暂无事件</div>';
+  },
+};
+
+/* access */
+PAGES.access = {
+  render() {
+    const base = location.origin;
+    $('#page').innerHTML = `
+      <div class="card"><div class="card-h"><h3>MCP（给 Claude / Cursor / Codex 用）</h3></div><div class="card-b">
+        <p style="margin-top:0">在项目目录运行下面的命令，会打印三种客户端的配置片段（含令牌）：</p>
+        <pre class="cfg">cd ~/CursorProject/esim-ble
+.venv/bin/python -m esimble.platform mcp-config</pre>
+        <p>可用工具：<span class="mono">get_status、list_numbers、prepare_number、wait_for_sms、get_latest_code、list_messages</span>；打开“API 发短信”后多一个 <span class="mono">send_sms</span>。</p>
+        <p class="small mut" style="margin-bottom:0">AI 收码流程：prepare_number → 等 online=true → 让网站发短信 → wait_for_sms。平台运行时 MCP 才能工作。</p></div></div>
+      <div class="card"><div class="card-h"><h3>REST 接口</h3><span class="sp"></span><a class="btn sm" href="/api/docs" target="_blank">打开 API 文档</a></div><div class="card-b">
+        <p style="margin-top:0">基地址 <span class="mono">${esc(base)}/api/v1</span>，请求头 <span class="mono">Authorization: Bearer &lt;token&gt;</span>。查看令牌：</p>
+        <pre class="cfg">.venv/bin/python -m esimble.platform token</pre>
+        <pre class="cfg">curl -H "Authorization: Bearer $TOKEN" ${esc(base)}/api/v1/numbers
+curl -X POST -H "Authorization: Bearer $TOKEN" ${esc(base)}/api/v1/numbers/&lt;号码&gt;/prepare
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \\
+     -d '{"number":"&lt;号码&gt;","since_id":&lt;cursor&gt;,"timeout":45}' ${esc(base)}/api/v1/wait</pre></div></div>
+      <div class="card"><div class="card-h"><h3>Python SDK</h3></div><div class="card-b">
+        <pre class="cfg">from esimble.platform.sdk import SmsPlatform
+p = SmsPlatform()                       # 自动读取本机令牌
+n = p.prepare("WEBBING")                # 让号码上线，拿到 cursor
+r = p.wait_for_code("WEBBING", since_id=n["cursor"], timeout=600)
+print(r["code"])</pre></div></div>`;
+  },
+};
+
+/* --------------------------------------------------------------- actions */
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-pick],[data-sel],[data-start],[data-ext],[data-end],[data-edit],[data-del],[data-home],[data-copy],[data-filter]');
+  if (!t) return;
+  try {
+    if (t.dataset.pick) { S.recvSel = t.dataset.pick; return; }
+    if (t.dataset.filter) { S.msgFilter.number = t.dataset.filter; return; }
+    e.preventDefault();
+    if (t.dataset.sel) { if (recvHold() && recvHold().iccid !== t.dataset.sel) toast('另一个号码的收码会话进行中，先结束它'); S.recvSel = t.dataset.sel; PAGES.receive.update(true); }
+    else if (t.dataset.start) {
+      t.disabled = true;
+      const old = recvHold(); if (old && old.iccid !== t.dataset.start) await api('DELETE', '/holds/' + old.id);
+      await api('POST', `/numbers/${t.dataset.start}/receive`, {});
+      await refresh(); PAGES.receive.update(true);
+    }
+    else if (t.dataset.ext) { await api('POST', `/holds/${t.dataset.ext}/extend?seconds=600`); toast('已延长 10 分钟'); await refresh(); PAGES.receive.update(); }
+    else if (t.dataset.end) { await api('DELETE', '/holds/' + t.dataset.end); toast('收码已结束'); await refresh(); PAGES.receive.update(true); }
+    else if (t.dataset.edit) openEdit(t.dataset.edit);
+    else if (t.dataset.home) {
+      const p = byIccid(t.dataset.home);
+      if (!confirm(`把 ${numName(p)} 设为常驻号？\n没有收码会话时，平台会切到这个号码并保持在线。`)) return;
+      await api('PATCH', '/settings', {home_iccid: p.iccid}); toast('已设为常驻号'); await refresh(); render();
+    }
+    else if (t.dataset.del) {
+      const p = byIccid(t.dataset.del);
+      const v = prompt(`从卡上删除 ${numName(p)}（${p.card_provider}）？\n此操作不可撤销。\n\n请输入 ICCID 后 4 位（${'*'.repeat(4)}）确认：`);
+      if (v === null) return;
+      if (v.trim() !== p.iccid.slice(-4)) return toast('确认码不对，已取消', true);
+      toast('正在通过蓝牙删除…');
+      await api('DELETE', `/numbers/${p.iccid}?confirm=${p.iccid}`); toast('已删除'); await refresh(); render();
+    }
+    else if (t.dataset.copy) { await navigator.clipboard.writeText(t.dataset.copy); toast('已复制 ' + t.dataset.copy); }
+  } catch (err) { toast(err.message, true); t.disabled = false; }
+});
+$('#menuBtn').onclick = () => $('#side').classList.toggle('open');
+window.addEventListener('hashchange', go);
+
+(async () => {
+  try { await refresh(); await pollMessages(); } catch (err) { toast(err.message, true); }
+  go();
+  setInterval(async () => {
+    try {
+      await refresh();
+      const rows = await pollMessages();
+      const P = PAGES[S.route];
+      if (rows.length && P.onNew) await P.onNew(rows);
+      if (P.tick && !document.querySelector('dialog[open]')) await P.tick();
+    } catch (e) { /* transient */ }
+  }, 2500);
+})();
+</script>
+</body>
+</html>
