@@ -99,11 +99,15 @@ logs/              运行日志（运行后生成，不入库）
 在上面的功能之上，加了一个常驻服务：网页后台、REST 接口、Python SDK 和 MCP。详见 [08 接码平台](docs/08-接码平台.md)。
 
 ```sh
-.venv/bin/pip install -r requirements-platform.txt
-.venv/bin/python -m esimble.platform serve        # 启动后台、接口和调度
-.venv/bin/python -m esimble.platform token        # 查看登录链接和令牌
+./start.sh        # 一键启动（首次会自动创建虚拟环境、安装依赖），打印后台登录链接
+./stop.sh         # 一键关闭
+./restart.sh      # 一键重启
+scripts/platform.sh status                        # 查看是否在运行、各设备组状态
 .venv/bin/python -m esimble.platform mcp-config   # 生成 Claude Code、Cursor、Codex 的 MCP 配置
 ```
+
+- 平台在后台运行，关掉终端也不会停；输出写在 `logs/platform-stdout.log`，运行日志在 `logs/platform.log`。
+- macOS 首次使用蓝牙时，系统会弹出权限请求，要允许终端（或你用的终端 App）使用蓝牙。
 
 - **调度：** 常驻号（Saily）一直在线；其他号码在后台"收码"页或通过 AI 按需切换，约 40 秒，用完自动切回常驻号。
 - **存储：** 短信入库到 `data/esimble.db` 后，从随身 WiFi 删除（设备最多存 20 条）。
