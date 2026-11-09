@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import secrets
+import signal
+import time
 
 from ..card_service import CardService
 from ..config import Config
 from .devices import GroupConfig, GroupDB, GroupView
 from .engine import Engine, PlatformError
 from .modem import PlatformMifi
+from . import lifecycle
 from .settings import PlatformSettings
-from .store import PlatformDB
+from .store import PlatformDB, iccid_match
 
 log = logging.getLogger("manager")
 
@@ -24,6 +28,8 @@ class Manager:
         self.ble_lock = asyncio.Lock()          # one BLE operation at a time, across groups
         self.engines: dict[str, Engine] = {}
         self._started = False
+        self._watchdog: asyncio.Task | None = None
+        self.auto_stop: dict = {}           # shown on the status page
         if engines is not None:                 # tests / single-engine use
             self.engines = engines
             self.groups = [e.group or GroupConfig(id=gid, name="设备组 1",
@@ -71,14 +77,69 @@ class Manager:
     def start(self) -> None:
         self._started = True
         asyncio.get_running_loop().call_later(15, lambda: asyncio.ensure_future(self._learn_imeis()))
+        self._watchdog = asyncio.create_task(self._auto_stop_loop(), name="mcp-watchdog")
         for g in self.groups:
             if g.enabled and g.id not in self.engines:
                 self.engines[g.id] = self._build(g)
                 self.engines[g.id].start()
 
     async def stop(self) -> None:
+        if self._watchdog:
+            self._watchdog.cancel()
         for e in list(self.engines.values()):
             await e.stop()
+
+    # ------------------------------------------------- MCP auto start/stop
+    def ready_to_stop(self) -> tuple[bool, str]:
+        """Release API/MCP waits and report whether every group is idle on its home number."""
+        for e in self.engines.values():
+            for h in list(e.holds.values()):
+                if h.reason != "manual":
+                    e.release(h.id)
+            if any(h.reason == "manual" for h in e.holds.values()):
+                return False, f"{e.group.name if e.group else e.gid}: 后台有收码会话"
+            if e.device_lock.locked() or e.switch_target:
+                return False, f"{e.group.name if e.group else e.gid}: 正在切号"
+            home = e.home_profile()
+            if home and not iccid_match(home["iccid"], e.current_iccid):
+                return False, f"{e.group.name if e.group else e.gid}: 正在切回常驻号"
+        return True, ""
+
+    async def _auto_stop_loop(self, interval: float = 10) -> None:
+        idle_since: float | None = None
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                if lifecycle.autostarted_pid() != os.getpid():
+                    idle_since, self.auto_stop = None, {}
+                    continue
+                leases = await asyncio.to_thread(lifecycle.live_leases)
+                self.auto_stop = {"enabled": True, "mcp_clients": len(leases)}
+                if leases:
+                    idle_since = None
+                    continue
+                idle_since = idle_since or time.time()
+                grace = self.s.mcp_idle_stop_seconds
+                waited = time.time() - idle_since
+                self.auto_stop["stop_in"] = max(0, round(grace - waited))
+                if waited < grace:
+                    continue
+                ok, why = self.ready_to_stop()
+                give_up = waited > grace + 2 * self.s.switch_timeout_seconds
+                if not ok and not give_up:
+                    self.auto_stop["waiting"] = why
+                    continue
+                msg = "no MCP client for %ds; stopping the auto-started platform" % waited
+                log.warning(msg + ("" if ok else f" (gave up waiting: {why})"))
+                self.db.event("platform", "所有 MCP 客户端已断开，自动关闭平台"
+                              + ("" if ok else f"（未等到：{why}）"))
+                lifecycle.clear_marker()
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001
+                log.exception("auto-stop watchdog")
 
     async def _restart(self, g: GroupConfig) -> None:
         old = self.engines.pop(g.id, None)

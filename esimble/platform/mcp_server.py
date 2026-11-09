@@ -7,12 +7,21 @@ Env:  ESIM_PLATFORM_URL / ESIM_PLATFORM_TOKEN (default: read data/platform.json)
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import signal
 import sys
+import time
+from urllib.parse import urlparse
 
 from mcp.server.mcpserver import MCPServer
 
+from . import lifecycle
 from .sdk import PlatformAPIError, SmsPlatform
+
+log = logging.getLogger("esim-mcp")
+AUTOSTART = os.environ.get("ESIM_MCP_AUTOSTART", "1") not in ("0", "false", "no")
 
 INSTRUCTIONS = """\
 Receive SMS (e.g. verification codes) on the user's own eSIM numbers.
@@ -41,11 +50,50 @@ def client() -> SmsPlatform:
     return _client
 
 
-async def _call(fn, *a, **kw):
+def _local() -> bool:
+    return (urlparse(client().base).hostname or "") in ("127.0.0.1", "localhost", "::1")
+
+
+def _healthy() -> bool:
     try:
-        return await asyncio.to_thread(fn, *a, **kw)
+        client().status()
+        return True
     except PlatformAPIError as e:
-        return {"error": e.detail, "http_status": e.status}
+        return e.status != 0          # 401 etc. = something is listening
+
+
+def _ensure_platform() -> bool:
+    """Start the platform if it is down. Returns True if it is (now) reachable."""
+    if not (AUTOSTART and _local()):
+        return False
+    started = lifecycle.start_platform(_healthy)
+    if started:
+        log.warning("platform was not running; started it (it stops again after the last "
+                    "MCP client disconnects)")
+        deadline = time.time() + 30        # let it read the card(s) first
+        while time.time() < deadline:
+            try:
+                if client().status().get("phase") not in ("starting", None):
+                    break
+            except PlatformAPIError:
+                pass
+            time.sleep(1)
+    return True
+
+
+async def _call(fn, *a, **kw):
+    for attempt in range(2):
+        try:
+            return await asyncio.to_thread(fn, *a, **kw)
+        except PlatformAPIError as e:
+            if e.status == 0 and attempt == 0:
+                try:
+                    if await asyncio.to_thread(_ensure_platform):
+                        continue
+                except Exception as ex:  # noqa: BLE001
+                    return {"error": f"platform not running and auto-start failed: {ex}",
+                            "http_status": 0}
+            return {"error": e.detail, "http_status": e.status}
 
 
 def _msg(m: dict) -> dict:
@@ -131,13 +179,21 @@ def _register_send() -> None:
         return await _call(client().send, number, to, text)
 
 
+def _allow_send() -> bool:
+    """Read the send permission from the local settings file (no need for the platform)."""
+    try:
+        return bool(json.loads(lifecycle.DATA_DIR.joinpath("platform.json").read_text())
+                    .get("api_allow_send", False))
+    except (OSError, ValueError):
+        return False
+
+
 def main() -> None:
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
-    try:
-        allow = client().status().get("settings", {}).get("api_allow_send", False)
-    except PlatformAPIError:
-        allow = False   # platform down: read tools still register and report the error
-    if allow:
+    if _local():
+        lifecycle.register_lease(os.environ.get("ESIM_MCP_CLIENT", ""))
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # run atexit -> drop lease
+    if _allow_send():
         _register_send()
     mcp.run("stdio")
 

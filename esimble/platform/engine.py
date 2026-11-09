@@ -99,6 +99,7 @@ class Engine:
             self.phase, self.phase_detail, self.phase_since = phase, detail, time.time()
 
     async def _run(self) -> None:
+        self._last_online = self.db.get_setting(f"last_online:{self.gid}", "")
         try:
             await self.refresh_card()
         except Exception as e:  # noqa: BLE001
@@ -204,6 +205,7 @@ class Engine:
         zic = st.get("ziccid", "")
         prof = self.db.profile_by_iccid(zic) if zic else None
         if prof and not iccid_match(prof["iccid"], self.current_iccid):
+            self.db.set_setting(f"last_online:{self.gid}", prof["iccid"])
             if self.current_iccid:
                 self.log.info("modem reports %s (expected %s)", prof["iccid"], self.current_iccid)
             self.current_iccid = prof["iccid"]
@@ -252,6 +254,9 @@ class Engine:
         except MifiError as e:
             self.log.warning("inbox read failed: %s", e)
             return 0
+        if not attribution and self._first_poll and prof and \
+                iccid_match(prof["iccid"], getattr(self, "_last_online", "")):
+            attribution = "active"      # same number as before the platform stopped
         attribution = attribution or ("startup" if self._first_poll else "active")
         if not prof:
             attribution = "unknown"
@@ -370,6 +375,7 @@ class Engine:
             self._step("online", "在线，可以接收短信")
             self.last_switch.update(finished=time.time(), ok=True)
         self.current_iccid = target
+        self.db.set_setting(f"last_online:{self.gid}", target)
         self.online_since = time.time()
         self.dwell_until = time.time() + self.s.dwell_seconds
         self.stats["switches"] += 1

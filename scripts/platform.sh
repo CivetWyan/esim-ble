@@ -10,6 +10,7 @@ PY="$ROOT/.venv/bin/python"
 PIDFILE="$ROOT/data/platform.pid"
 LOG="$ROOT/logs/platform-stdout.log"
 APPLOG="$ROOT/logs/platform.log"
+MARKER="$ROOT/data/platform.autostart"   # written by the MCP server when it started the platform
 
 c_ok=$'\033[32m'; c_err=$'\033[31m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
 ok()   { printf '%s✓%s %s\n' "$c_ok" "$c_off" "$*"; }
@@ -53,6 +54,9 @@ do_start() {
   local running; running="$(pids)"
   if [ -n "$running" ]; then
     ok "平台已在运行（PID $(echo $running)）"
+    if [ -f "$MARKER" ]; then
+      rm -f "$MARKER"; info "它原本由 MCP 自动启动，现在改为手动常驻，不会再被自动关闭"
+    fi
     info "后台：$(login_url)"
     return 0
   fi
@@ -83,6 +87,7 @@ do_start() {
 
 do_stop() {
   local running; running="$(pids)"
+  rm -f "$MARKER"
   if [ -z "$running" ]; then
     rm -f "$PIDFILE"; ok "平台没有在运行"; return 0
   fi
@@ -108,6 +113,11 @@ do_status() {
   local running; running="$(pids)"
   if [ -z "$running" ]; then echo "未运行"; return 3; fi
   ok "运行中（PID $(echo $running)，端口 $(port)）"
+  if [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$(echo $running)" ]; then
+    echo "  由 MCP 自动启动：所有 MCP 客户端断开后会自动关闭（运行 ./start.sh 可改为常驻）"
+  else
+    echo "  手动启动：常驻运行"
+  fi
   "$PY" - <<'EOF' 2>/dev/null
 from esimble.platform.sdk import SmsPlatform
 st = SmsPlatform().status()

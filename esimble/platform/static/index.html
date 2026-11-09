@@ -228,7 +228,9 @@ async function refresh() {
     ? `<span class="tag ${groups().every(g => g.phase === 'online' || g.phase === 'disabled') ? 'ok' : 'warn'}"><span class="dot"></span>${groups().filter(g => g.phase === 'online').length} / ${groups().filter(g => g.phase !== 'disabled').length} 组在线</span> <span class="small" style="margin-left:8px">${groups().filter(g => g.current).map(g => esc(g.current.label || g.current.iccid)).join(' · ')}</span>`
     : `${phaseTag()} <span class="small" style="margin-left:8px">${cur ? '当前在线：<b>' + esc(cur.label || cur.iccid) + '</b> ' + esc(cur.msisdn || '') : ''}</span>`;
   const m = S.status.modem || {};
-  $('#sideStatus').innerHTML = `<div class="row" style="gap:6px">${icon('wifi')}${esc(m.network_provider || '-')} ${esc(m.network_type || '')}</div><div class="mut">上次收取 ${ago(S.status.last_poll_at)}</div>`;
+  const as = S.status.auto_stop || {};
+  $('#sideStatus').innerHTML = `<div class="row" style="gap:6px">${icon('wifi')}${esc(m.network_provider || '-')} ${esc(m.network_type || '')}</div><div class="mut">上次收取 ${ago(S.status.last_poll_at)}</div>`
+    + (as.enabled ? `<div class="mut" title="由 MCP 自动启动；运行 ./start.sh 可改为常驻">MCP 托管 · ${as.mcp_clients ? as.mcp_clients + ' 个客户端' : (as.waiting ? esc(as.waiting) : '约 ' + (as.stop_in ?? '-') + ' 秒后关闭')}</div>` : '');
   const h = recvHold();
   $('#navRecv').hidden = !h; if (h) $('#navRecv').textContent = '进行中';
   $('#navNew').hidden = !S.unseen; $('#navNew').textContent = S.unseen;
@@ -662,11 +664,12 @@ PAGES.settings = {
         ${num('poll_seconds', '收取间隔', '秒', '')}
         ${sw('delete_after_store', '入库后删除', '短信写入平台后从随身 WiFi 删除（设备最多存 20 条）')}
         ${sw('api_allow_send', 'API 发短信', '允许 REST / SDK / MCP 发短信；修改后需要重启 MCP 客户端')}
+        ${num('mcp_idle_stop_seconds', 'MCP 自动关闭', '秒', '平台由 MCP 自动启动时，最后一个 MCP 客户端断开后等这么久再关闭；手动启动的平台不受影响')}
       </div></div></div>
       <div class="row"><button class="btn pri" id="saveSettings">保存设置</button></div>`;
     $('#saveSettings').onclick = async () => {
       const b = {};
-      for (const k of ['dwell_seconds','poll_seconds','switch_timeout_seconds','wait_hold_seconds']) b[k] = +$('#st_' + k).value;
+      for (const k of ['dwell_seconds','poll_seconds','switch_timeout_seconds','wait_hold_seconds','mcp_idle_stop_seconds']) b[k] = +$('#st_' + k).value;
       for (const k of ['delete_after_store','api_allow_send']) b[k] = $('#st_' + k).checked;
       try { await api('PATCH', '/settings', b); toast('设置已保存'); await refresh(); } catch (err) { toast(err.message, true); }
     };

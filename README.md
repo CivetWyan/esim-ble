@@ -118,6 +118,7 @@ scripts/platform.sh status                        # 查看是否在运行、各�
 - **调度：** 常驻号（Saily）一直在线；其他号码在后台"收码"页或通过 AI 按需切换，约 40 秒，用完自动切回常驻号。
 - **存储：** 短信入库到 `data/esimble.db` 后，从随身 WiFi 删除（设备最多存 20 条）。
 - **不要混用：** 平台运行时，不要再用 `esimble card` 或 `esimble mifi` 手动操作卡和随身 WiFi。
+- **MCP 自动启停：** AI 调用 MCP 时，如果平台没开，会自动拉起；所有 AI 客户端断开 2 分钟后，再自动关闭（只关 MCP 自己启动的那份）。
 - **多设备：** 在"设备管理"里扫描、接入新的 9eSIM 卡和随身 WiFi；多台随身 WiFi 地址冲突时，可以一键改地址。几组设备就有几个号同时在线。
 - **代码位置：** `esimble/platform/`，测试 `tests/test_platform.py`，MCP 自检脚本 `scripts/mcp_smoke.py`。
 

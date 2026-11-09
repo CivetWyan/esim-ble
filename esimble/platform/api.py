@@ -199,6 +199,7 @@ def create_app(target, manage_engine: bool = True) -> FastAPI:
         st["card"] = {k: ((e.card_info if e else None) or {}).get(k) for k in ("eid", "free_nvm")}
         st["groups"] = [mgr.group_status(g) for g in mgr.groups]
         st["holds"] = mgr.all_holds()
+        st["auto_stop"] = mgr.auto_stop
         st["settings"] = s.public()
         return st
 

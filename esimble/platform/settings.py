@@ -29,6 +29,8 @@ class PlatformSettings:
     groups: list = field(default_factory=list)   # device groups, see devices.GroupConfig
     # inbox handling
     delete_after_store: bool = True
+    # MCP lifecycle: an MCP-started platform stops this long after the last MCP client exits
+    mcp_idle_stop_seconds: int = 120
     # API permissions
     api_allow_send: bool = False          # REST/SDK/MCP send (admin web always may send)
 
@@ -47,7 +49,7 @@ class PlatformSettings:
 
     EDITABLE = ("home_iccid", "rotation_enabled", "dwell_seconds", "poll_seconds", "switch_timeout_seconds",
                 "wait_hold_seconds", "switch_retry_after_seconds", "delete_after_store",
-                "api_allow_send")
+                "api_allow_send", "mcp_idle_stop_seconds")
 
     def update(self, values: dict) -> None:
         for k, v in values.items():
