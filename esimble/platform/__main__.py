@@ -52,13 +52,55 @@ def serve(args) -> int:
     return 0
 
 
-def mcp_config() -> int:
+def hold() -> int:
+    """Admin session (used through an SSH tunnel): start the platform if needed and keep it
+    alive like an MCP client until stdin closes. Prints the login URL on the first line."""
+    from . import lifecycle
+    from .sdk import PlatformAPIError, SmsPlatform
+    s = settings_mod.load()
+    lifecycle.register_lease("admin-session")
+    c = SmsPlatform(f"http://127.0.0.1:{s.port}", s.api_token)
+
+    def healthy() -> bool:
+        try:
+            c.status()
+            return True
+        except PlatformAPIError as e:
+            return e.status != 0
+    try:
+        lifecycle.start_platform(healthy)
+    except Exception as e:  # noqa: BLE001
+        print(f"ERROR {e}", flush=True)
+        return 1
+    print(f"URL http://127.0.0.1:{s.port}/login?token={s.api_token}", flush=True)
+    try:
+        while sys.stdin.read(1):     # block until the SSH session closes stdin
+            pass
+    except (KeyboardInterrupt, OSError):
+        pass
+    return 0
+
+
+def mcp_config(remote: str | None = None) -> int:
     s = settings_mod.load()
     exe = ROOT / ".venv" / "bin" / "esim-sms-mcp"
     if not exe.exists():
         print("# .venv/bin/esim-sms-mcp is missing: run ./start.sh once (or "
               ".venv/bin/pip install -e .) first\n", file=sys.stderr)
     exe = str(exe)
+    if remote:   # MCP runs on the remote host and is reached through SSH
+        ssh = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", remote, exe]
+        print("# Claude Code:")
+        print(f"claude mcp add esim-sms -s user -- ssh {' '.join(ssh)}\n")
+        print("# Cursor (~/.cursor/mcp.json):")
+        print(json.dumps({"mcpServers": {"esim-sms": {"command": "ssh", "args": ssh}}},
+                         indent=2) + "\n")
+        print("# Codex (~/.codex/config.toml):")
+        print("[mcp_servers.esim-sms]")
+        print('command = "ssh"')
+        print("args = [" + ", ".join(f'"{a}"' for a in ssh) + "]")
+        print("tool_timeout_sec = 120")
+        return 0
     entry = {"command": exe, "args": [],
              "env": {"ESIM_PLATFORM_URL": f"http://127.0.0.1:{s.port}",
                      "ESIM_PLATFORM_TOKEN": s.api_token}}
@@ -86,7 +128,10 @@ def main(argv=None) -> int:
     t = sub.add_parser("token")
     t.add_argument("--rotate", action="store_true")
     sub.add_parser("mcp")
-    sub.add_parser("mcp-config")
+    mc = sub.add_parser("mcp-config")
+    mc.add_argument("--remote", metavar="SSH_HOST",
+                    help="print configs that run the MCP on SSH_HOST (this checkout's path)")
+    sub.add_parser("hold", help="keep an auto-started platform alive while stdin is open")
     args = ap.parse_args(argv)
     if args.cmd == "serve":
         return serve(args)
@@ -103,6 +148,10 @@ def main(argv=None) -> int:
         from .mcp_server import main as mcp_main
         mcp_main()
         return 0
+    if args.cmd == "hold":
+        return hold()
+    if args.cmd == "mcp-config" and args.remote:
+        return mcp_config(args.remote)
     if args.cmd == "mcp-config":
         return mcp_config()
     return 1

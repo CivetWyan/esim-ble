@@ -27,7 +27,8 @@ except Exception: print(8787)' 2>/dev/null || echo 8787
 pids() {
   local p cwd
   for p in $(pgrep -f "esimble.platform serve" 2>/dev/null); do
-    cwd="$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+    if [ -e "/proc/$p/cwd" ]; then cwd="$(readlink "/proc/$p/cwd" 2>/dev/null)"
+    else cwd="$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"; fi
     [ -n "$cwd" ] && [ "$(cd "$cwd" 2>/dev/null && pwd -P)" = "$ROOT" ] && echo "$p"
   done
 }
@@ -56,6 +57,11 @@ setup() {
 login_url() { "$PY" -m esimble.platform token 2>&1 >/dev/null | tail -1; }
 
 do_start() {
+  if [ -f "$ROOT/data/remote.env" ] && [ -z "${ESIM_LOCAL:-}" ]; then
+    err "平台已配置为在远端运行（data/remote.env）：用 scripts/remote.sh 或“打开远程后台.command”"
+    info "确实要在本机启动：ESIM_LOCAL=1 $0 start"
+    return 1
+  fi
   local running; running="$(pids)"
   if [ -n "$running" ]; then
     ok "平台已在运行（PID $(echo $running)）"

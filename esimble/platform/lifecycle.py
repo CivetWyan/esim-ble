@@ -29,7 +29,11 @@ SCRIPT = ROOT / "scripts" / "platform.sh"
 
 
 # ------------------------------------------------------------------ processes
-def pid_alive(pid: int, must_contain: str = "") -> bool:
+# command-line markers of processes that may hold a lease
+LEASE_MARKERS = ("esim-sms-mcp", "esim-platform", "esimble.platform")
+
+
+def pid_alive(pid: int, must_contain: str | tuple = "") -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -42,7 +46,8 @@ def pid_alive(pid: int, must_contain: str = "") -> bool:
                                  text=True, timeout=3).stdout
         except (OSError, subprocess.TimeoutExpired):
             return True
-        return must_contain in cmd
+        markers = (must_contain,) if isinstance(must_contain, str) else must_contain
+        return any(m in cmd for m in markers)
     return True
 
 
@@ -78,7 +83,7 @@ def live_leases() -> list[dict]:
         except (ValueError, KeyError, OSError):
             f.unlink(missing_ok=True)
             continue
-        if pid_alive(pid, "esimble.platform mcp"):
+        if pid_alive(pid, LEASE_MARKERS):
             out.append(d)
         else:
             f.unlink(missing_ok=True)

@@ -147,7 +147,30 @@ def _run(*cmd: str) -> str:
         return ""
 
 
+def _linux_interfaces() -> list[dict]:
+    import json as _json
+    try:
+        addrs = _json.loads(_run("ip", "-j", "-4", "addr") or "[]")
+        routes = _json.loads(_run("ip", "-j", "-4", "route") or "[]")
+    except ValueError:
+        return []
+    gw = {r.get("dev"): r.get("gateway") for r in routes if r.get("gateway")}
+    out = []
+    for a in addrs:
+        for info in a.get("addr_info", []):
+            ip = info.get("local", "")
+            if not ip or ip.startswith("127."):
+                continue
+            net = ipaddress.ip_network(f"{ip}/{info.get('prefixlen', 24)}", strict=False)
+            out.append({"iface": a.get("ifname", ""), "ip": ip, "netmask": str(net.netmask),
+                        "subnet": str(net), "router": gw.get(a.get("ifname"), "") or ""})
+    return out
+
+
 def local_interfaces() -> list[dict]:
+    import sys as _sys
+    if _sys.platform.startswith("linux"):
+        return _linux_interfaces()
     out, cur = [], None
     for line in _run("ifconfig").splitlines():
         if line and not line[0].isspace():

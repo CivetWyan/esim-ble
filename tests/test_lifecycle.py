@@ -50,6 +50,18 @@ class LeaseTests(unittest.TestCase):
             child.wait()
         self.assertEqual(lifecycle.live_leases(), [])
 
+    def test_lease_of_console_script_launcher_counts_as_alive(self):
+        # regression: .venv/bin/esim-sms-mcp has no "esimble.platform mcp" in its command line
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)",
+                                  "/x/.venv/bin/esim-sms-mcp"])
+        try:
+            lifecycle.LEASE_DIR.mkdir(parents=True)
+            (lifecycle.LEASE_DIR / f"{child.pid}.json").write_text(json.dumps({"pid": child.pid}))
+            self.assertEqual([d["pid"] for d in lifecycle.live_leases()], [child.pid])
+        finally:
+            child.kill()
+            child.wait()
+
     def test_register_and_remove(self):
         lifecycle.register_lease("test")
         self.assertTrue((lifecycle.LEASE_DIR / f"{os.getpid()}.json").exists())

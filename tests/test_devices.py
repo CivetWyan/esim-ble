@@ -1,6 +1,7 @@
 """Offline tests for device groups (multi card + multi MiFi), discovery helpers."""
 
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -145,6 +146,19 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(r["mifis"][0]["group_id"], "g1")
         self.assertEqual(r["conflicts"][0]["interfaces"], ["en10", "en11"])
         self.assertEqual(r["suggested_host"], "192.168.1.1")
+
+    def test_linux_interfaces_from_ip_json(self):
+        addr = json.dumps([
+            {"ifname": "lo", "addr_info": [{"local": "127.0.0.1", "prefixlen": 8}]},
+            {"ifname": "wlp3s0", "addr_info": [{"local": "192.168.31.4", "prefixlen": 24}]},
+            {"ifname": "enx344b50000000", "addr_info": [{"local": "192.168.0.100", "prefixlen": 24}]}])
+        route = json.dumps([{"dst": "default", "gateway": "192.168.31.1", "dev": "wlp3s0"},
+                            {"dst": "192.168.0.0/24", "dev": "enx344b50000000"}])
+        with mock.patch.object(devices, "_run", side_effect=lambda *a: addr if "addr" in a else route):
+            r = devices._linux_interfaces()
+        self.assertEqual([(i["iface"], i["subnet"], i["router"]) for i in r],
+                         [("wlp3s0", "192.168.31.0/24", "192.168.31.1"),
+                          ("enx344b50000000", "192.168.0.0/24", "")])
 
     def test_relocate_rejects_bad_address(self):
         for bad in ("8.8.8.1", "192.168.1.5", "fe80::1"):
