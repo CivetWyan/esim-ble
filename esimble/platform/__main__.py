@@ -54,20 +54,22 @@ def serve(args) -> int:
 
 def mcp_config() -> int:
     s = settings_mod.load()
-    py = str(ROOT / ".venv" / "bin" / "python")
-    entry = {"command": py, "args": ["-m", "esimble.platform", "mcp"], "cwd": str(ROOT),
+    exe = ROOT / ".venv" / "bin" / "esim-sms-mcp"
+    if not exe.exists():
+        print("# .venv/bin/esim-sms-mcp is missing: run ./start.sh once (or "
+              ".venv/bin/pip install -e .) first\n", file=sys.stderr)
+    exe = str(exe)
+    entry = {"command": exe, "args": [],
              "env": {"ESIM_PLATFORM_URL": f"http://127.0.0.1:{s.port}",
                      "ESIM_PLATFORM_TOKEN": s.api_token}}
     print("# Claude Code:")
     print(f"claude mcp add esim-sms -s user -e ESIM_PLATFORM_URL=http://127.0.0.1:{s.port} "
-          f"-e ESIM_PLATFORM_TOKEN={s.api_token} -- {py} -m esimble.platform mcp\n")
+          f"-e ESIM_PLATFORM_TOKEN={s.api_token} -- {exe}\n")
     print("# Cursor (~/.cursor/mcp.json) / Claude Desktop:")
     print(json.dumps({"mcpServers": {"esim-sms": entry}}, indent=2) + "\n")
     print("# Codex (~/.codex/config.toml):")
     print("[mcp_servers.esim-sms]")
-    print(f'command = "{py}"')
-    print('args = ["-m", "esimble.platform", "mcp"]')
-    print(f'cwd = "{ROOT}"')
+    print(f'command = "{exe}"')
     print("tool_timeout_sec = 120")
     print(f'env = {{ ESIM_PLATFORM_URL = "http://127.0.0.1:{s.port}", '
           f'ESIM_PLATFORM_TOKEN = "{s.api_token}" }}')

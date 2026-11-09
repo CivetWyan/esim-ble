@@ -172,3 +172,22 @@ class McpAutostartTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LauncherTests(unittest.TestCase):
+    """Regression: Claude Code starts the MCP from the user's project directory."""
+
+    def test_mcp_launcher_starts_from_any_directory(self):
+        from esimble.config import ROOT
+        exe = ROOT / ".venv" / "bin" / "esim-sms-mcp"
+        if not exe.exists():
+            self.skipTest("launcher not installed (run ./start.sh or pip install -e .)")
+        init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "t", "version": "1"}}}) + "\n"
+        with tempfile.TemporaryDirectory() as other:
+            env = {**os.environ, "ESIM_PLATFORM_URL": "http://127.0.0.1:9", "ESIM_MCP_AUTOSTART": "0"}
+            p = subprocess.run([str(exe)], input=init, capture_output=True, text=True, cwd=other,
+                               env=env, timeout=30)
+        self.assertNotIn("ModuleNotFoundError", p.stderr)
+        self.assertIn('"serverInfo"', p.stdout)

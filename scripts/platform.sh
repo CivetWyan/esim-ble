@@ -45,6 +45,11 @@ setup() {
     "$PY" -m pip install -q --upgrade pip >/dev/null 2>&1
     "$PY" -m pip install -q -r requirements-platform.txt || { err "依赖安装失败"; exit 1; }
   fi
+  # the MCP launcher (.venv/bin/esim-sms-mcp) must work from any directory
+  if [ ! -x "$ROOT/.venv/bin/esim-sms-mcp" ] || ! (cd / && "$PY" -c "import esimble" 2>/dev/null); then
+    info "安装 MCP 启动命令…"
+    "$PY" -m pip install -q --no-deps -e "$ROOT" >/dev/null 2>&1 || { err "安装 esimble 失败"; exit 1; }
+  fi
   mkdir -p data logs
 }
 

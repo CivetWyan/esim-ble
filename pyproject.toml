@@ -11,6 +11,8 @@ qr = ["opencv-python-headless>=4.8"]
 
 [project.scripts]
 esimble = "esimble.cli:main"
+esim-sms-mcp = "esimble.platform.mcp_server:main"
+esim-platform = "esimble.platform.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -18,3 +20,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["esimble*"]
+
+[tool.setuptools.package-data]
+"esimble.platform" = ["static/*"]
