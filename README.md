@@ -5,8 +5,8 @@
 | 概览 | 收码 |
 |---|---|
 | ![概览](docs/images/overview.png) | ![收码](docs/images/receive-progress.png) |
-| **号卡管理** | **系统设置** |
-| ![号卡管理](docs/images/numbers.png) | ![系统设置](docs/images/settings.png) |
+| **号卡管理** | **设备管理** |
+| ![号卡管理](docs/images/numbers.png) | ![设备管理](docs/images/devices.png) |
 
 > 截图来自 `scripts/demo_server.py`，数据都是虚构的。没有硬件也可以先运行它看看界面：`.venv/bin/python scripts/demo_server.py`，然后打开 http://127.0.0.1:8788/login?token=demo 。
 
@@ -108,6 +108,7 @@ logs/              运行日志（运行后生成，不入库）
 - **调度：** 常驻号（Saily）一直在线；其他号码在后台"收码"页或通过 AI 按需切换，约 40 秒，用完自动切回常驻号。
 - **存储：** 短信入库到 `data/esimble.db` 后，从随身 WiFi 删除（设备最多存 20 条）。
 - **不要混用：** 平台运行时，不要再用 `esimble card` 或 `esimble mifi` 手动操作卡和随身 WiFi。
+- **多设备：** 在"设备管理"里扫描、接入新的 9eSIM 卡和随身 WiFi；多台随身 WiFi 地址冲突时，可以一键改地址。几组设备就有几个号同时在线。
 - **代码位置：** `esimble/platform/`，测试 `tests/test_platform.py`，MCP 自检脚本 `scripts/mcp_smoke.py`。
 
 ## 许可证

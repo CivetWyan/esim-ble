@@ -26,6 +26,7 @@ class PlatformSettings:
     switch_timeout_seconds: int = 600     # enable + reboot + register + sms ready
     wait_hold_seconds: int = 600          # how long an on-demand wait keeps its number online
     switch_retry_after_seconds: int = 1800  # skip a number in rotation after a failed switch
+    groups: list = field(default_factory=list)   # device groups, see devices.GroupConfig
     # inbox handling
     delete_after_store: bool = True
     # API permissions
@@ -41,6 +42,7 @@ class PlatformSettings:
     def public(self) -> dict:
         d = asdict(self)
         d.pop("api_token")
+        d.pop("groups")
         return d
 
     EDITABLE = ("home_iccid", "rotation_enabled", "dwell_seconds", "poll_seconds", "switch_timeout_seconds",

@@ -44,7 +44,11 @@ class Hold:
 
 class Engine:
     def __init__(self, cfg: Config, settings: PlatformSettings, db: PlatformDB,
-                 mifi: PlatformMifi | None = None, card: CardService | None = None):
+                 mifi: PlatformMifi | None = None, card: CardService | None = None,
+                 group=None):
+        self.group = group
+        self.gid = group.id if group else "g1"
+        self.log = logging.getLogger(f"engine.{group.id}" if group else "engine")
         self.cfg = cfg
         self.s = settings
         self.db = db
@@ -91,20 +95,20 @@ class Engine:
 
     def _set_phase(self, phase: str, detail: str = "") -> None:
         if phase != self.phase or detail != self.phase_detail:
-            log.info("phase %s %s", phase, detail)
+            self.log.info("phase %s %s", phase, detail)
             self.phase, self.phase_detail, self.phase_since = phase, detail, time.time()
 
     async def _run(self) -> None:
         try:
             await self.refresh_card()
         except Exception as e:  # noqa: BLE001
-            log.warning("initial card read failed: %s", e)
+            self.log.warning("initial card read failed: %s", e)
             self.db.event("card", f"initial card read failed: {e}", "warning")
         self.dwell_until = time.time() + self.s.dwell_seconds
         try:
             await self._poll()   # learn which number is online before scheduling
         except Exception as e:  # noqa: BLE001
-            log.warning("initial poll failed: %s", e)
+            self.log.warning("initial poll failed: %s", e)
         while True:
             try:
                 target = self._next_target()
@@ -118,7 +122,7 @@ class Engine:
                 raise
             except Exception as e:  # noqa: BLE001
                 self.last_error = f"{type(e).__name__}: {e}"
-                log.exception("engine loop error")
+                self.log.exception("engine loop error")
                 self._set_phase("error", self.last_error)
             self._wake.clear()
             try:
@@ -201,7 +205,7 @@ class Engine:
         prof = self.db.profile_by_iccid(zic) if zic else None
         if prof and not iccid_match(prof["iccid"], self.current_iccid):
             if self.current_iccid:
-                log.info("modem reports %s (expected %s)", prof["iccid"], self.current_iccid)
+                self.log.info("modem reports %s (expected %s)", prof["iccid"], self.current_iccid)
             self.current_iccid = prof["iccid"]
             self.online_since = time.time()
         elif not prof:
@@ -246,7 +250,7 @@ class Engine:
         try:
             items = await self.mifi.inbox(1)
         except MifiError as e:
-            log.warning("inbox read failed: %s", e)
+            self.log.warning("inbox read failed: %s", e)
             return 0
         attribution = attribution or ("startup" if self._first_poll else "active")
         if not prof:
@@ -259,7 +263,7 @@ class Engine:
             rid = self.db.store_modem_message(m, prof, attribution)
             if rid:
                 stored += 1
-                log.info("stored %s sms id=%s from %s for %s (%s)", m["direction"], rid,
+                self.log.info("stored %s sms id=%s from %s for %s (%s)", m["direction"], rid,
                          m["peer"], prof["iccid"] if prof else "?", attribution)
             if rid or self.db.dedup_exists(m):
                 deletable.append(m)
@@ -273,9 +277,9 @@ class Engine:
                 for m in deletable:
                     self.db.mark_deleted(m)
                 self.stats["deleted"] += len(deletable)
-                log.info("deleted %d stored sms from the MiFi", len(deletable))
+                self.log.info("deleted %d stored sms from the MiFi", len(deletable))
             except MifiError as e:
-                log.warning("delete from MiFi failed: %s", e)
+                self.log.warning("delete from MiFi failed: %s", e)
                 self.db.event("mifi", f"delete from MiFi failed: {e}", "warning")
         try:
             self.capacity = await self.mifi.capacity()
@@ -291,7 +295,7 @@ class Engine:
         t0 = time.time()
         self.last_switch = {"target": target, "label": label, "started": t0, "finished": 0,
                             "ok": None, "error": "", "steps": []}
-        log.info("switching to %s (%s)", target, label)
+        self.log.info("switching to %s (%s)", target, label)
         self.db.event("switch", f"switching to {label} ({target})")
         try:
             async with self.device_lock:
@@ -305,13 +309,13 @@ class Engine:
                 self._step("drain", "已收取当前号码的短信")
                 self._set_phase("switching", f"enabling {label} over Bluetooth")
                 rc = await self.card.enable(target)
-                log.info("enable rc=%s", rc)
+                self.log.info("enable rc=%s", rc)
                 self._step("enable", "蓝牙启用成功")
                 self._set_phase("rebooting", "rebooting the MiFi so it re-registers")
                 try:
                     await self.mifi.reboot()
                 except MifiError as e:
-                    log.info("reboot call ended with %s (expected while it goes down)", e)
+                    self.log.info("reboot call ended with %s (expected while it goes down)", e)
                 # wait for it to go down (up to 60 s) and come back
                 down_deadline = time.time() + 60
                 while time.time() < down_deadline and await self.mifi.reachable():
@@ -346,7 +350,7 @@ class Engine:
         except Exception as e:  # noqa: BLE001
             self.stats["switch_failures"] += 1
             msg = f"{type(e).__name__}: {e}"
-            log.warning("switch to %s failed: %s", target, msg)
+            self.log.warning("switch to %s failed: %s", target, msg)
             self.db.event("switch", f"switch to {label} failed: {msg}", "error")
             self.db.update_profile(target, last_switch_error=msg, last_switch_error_at=time.time())
             for h in self.holds.values():
@@ -516,6 +520,7 @@ class Engine:
                 k: self.capacity.get(k) for k in ("total", "used")},
             "last_poll_at": self.last_poll_at, "last_error": self.last_error,
             "card_busy": self.card.busy,
+            "group_id": self.gid,
             "holds": [{"id": h.id, "iccid": h.iccid, "reason": h.reason, "until": h.until,
                        "created": h.created, "failed": h.failed}
                       for h in sorted(self.holds.values(), key=lambda h: h.created)

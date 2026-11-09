@@ -62,6 +62,8 @@ class PlatformDB(Database):
             if name not in cols:
                 self.x(f"ALTER TABLE messages ADD COLUMN {name} {ddl}")
         self.x("CREATE INDEX IF NOT EXISTS idx_messages_dir ON messages(direction, id)")
+        if "device_id" not in {r["name"] for r in self.q("PRAGMA table_info(profiles)")}:
+            self.x("ALTER TABLE profiles ADD COLUMN device_id TEXT DEFAULT ''")
         # keep extracted codes in step with the current extraction rules
         for r in self.q("SELECT id, body, code FROM messages WHERE direction='in' "
                         "ORDER BY id DESC LIMIT 2000"):

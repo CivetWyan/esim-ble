@@ -17,10 +17,9 @@ import uvicorn  # noqa: E402
 
 from esimble.config import Config  # noqa: E402
 from esimble.platform.api import create_app  # noqa: E402
-from esimble.platform.engine import Engine  # noqa: E402
 from esimble.platform.settings import PlatformSettings  # noqa: E402
 from esimble.platform.store import PlatformDB  # noqa: E402
-from test_platform import A, B, FakeCard, FakeMifi  # noqa: E402
+from test_platform import A, B  # noqa: E402
 
 SAMPLES = [
     ("10690000", "【示例商城】您的验证码是 482913，5 分钟内有效，请勿泄露。"),
@@ -31,23 +30,30 @@ SAMPLES = [
 
 
 async def main() -> None:
+    from test_devices import C, FakeManager
+    from esimble.platform.devices import GroupConfig
     tmp = Path(tempfile.mkdtemp(prefix="esim-demo-"))
     db = PlatformDB(tmp / "demo.db")
-    s = PlatformSettings(api_token="demo", port=8788, home_iccid=A)
+    groups = [GroupConfig(id="g1", name="设备组 1", ble_device="9eSIM000000", home_iccid=A,
+                          mifi_imei="860000000000001").to_dict(),
+              GroupConfig(id="g2", name="设备组 2", ble_device="9eSIM111111", home_iccid=C,
+                          mifi_host="192.168.1.1", mifi_imei="860000000000002").to_dict()]
+    s = PlatformSettings(api_token="demo", port=8788, groups=groups)
     s.save = lambda *a: None
-    mifi = FakeMifi()
-    card = FakeCard(db, mifi)
-    eng = Engine(Config(), s, db, mifi=mifi, card=card)
-    await eng.refresh_card()
-    db.update_profile(A, label="Saily US", tags="us,otp", notes="常驻号")
+    mgr = FakeManager(Config(), s, db)
+    mgr.start()
+    await asyncio.sleep(0.5)
+    db.update_profile(A, label="Saily US", tags="us,otp", msisdn="+15550000001")
     db.update_profile(B, label="Cellfie GE", msisdn="+995500000002", tags="ge")
-    for peer, body in SAMPLES:
-        mifi.deliver(peer, body)
-        await eng._poll()
-    app = create_app(eng)
+    db.update_profile(C, label="CMCC 示例", msisdn="+8613800000003", tags="cn")
+    e1, e2 = mgr.engines["g1"], mgr.engines["g2"]
+    for i, (peer, body) in enumerate(SAMPLES):
+        e = e1 if i % 2 == 0 else e2
+        e.mifi.deliver(peer, body)
+        await e._poll()
+    app = create_app(mgr, manage_engine=False)
     print("demo: http://127.0.0.1:8788/login?token=demo")
     await uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=8788, log_level="warning")).serve()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

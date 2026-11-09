@@ -24,7 +24,7 @@ def serve(args) -> int:
 
     from .. import config as config_mod
     from .api import create_app
-    from .engine import Engine
+    from .manager import Manager
     from .store import PlatformDB
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -43,13 +43,8 @@ def serve(args) -> int:
     s = settings_mod.load()
     if args.port:
         s.port = args.port
-    if not cfg.mifi_password:
-        print("MiFi password not set: run  .venv/bin/python -m esimble config --mifi-password",
-              file=sys.stderr)
-        return 2
     db = PlatformDB(DATA_DIR / "esimble.db")
-    engine = Engine(cfg, s, db)
-    app = create_app(engine)
+    app = create_app(Manager(cfg, s, db))
     url = f"http://127.0.0.1:{s.port}"
     logging.getLogger("platform").info("admin: %s/login?token=%s", url, s.api_token)
     print(f"\n  管理后台: {url}/login?token={s.api_token}\n  API 文档: {url}/api/docs\n")

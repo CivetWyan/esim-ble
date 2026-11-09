@@ -163,6 +163,7 @@ pre.cfg{background:var(--bg);border:1px solid var(--line);border-radius:8px;padd
       <a href="#/messages" data-p="messages"><svg class="i"><use href="#i-msg"/></svg>短信记录<span class="cnt" id="navNew" hidden></span></a>
       <a href="#/send" data-p="send"><svg class="i"><use href="#i-send"/></svg>发送短信</a>
       <div class="grp">系统</div>
+      <a href="#/devices" data-p="devices"><svg class="i"><use href="#i-chip"/></svg>设备管理</a>
       <a href="#/settings" data-p="settings"><svg class="i"><use href="#i-set"/></svg>系统设置</a>
       <a href="#/events" data-p="events"><svg class="i"><use href="#i-log"/></svg>事件日志</a>
       <a href="#/access" data-p="access"><svg class="i"><use href="#i-api"/></svg>接入 API / MCP</a>
@@ -210,8 +211,12 @@ const hm = iso => (iso || '').slice(5, 19).replace('T', ' ');
 const numName = p => p ? (p.label || p.card_nickname || p.card_name || p.iccid) : '-';
 const byIccid = i => S.nums.find(n => n.iccid === i);
 const PHASE = {online:['在线','ok'], switching:['切换中','warn'], rebooting:['随身WiFi重启中','warn'], waiting_network:['等待注网','warn'],
-  no_service:['无服务','bad'], mifi_offline:['随身WiFi不可达','bad'], error:['错误','bad'], idle:['无受管号码在线','warn'], starting:['启动中','mut']};
-const phaseTag = () => { const [t, c] = PHASE[S.status?.phase] || [S.status?.phase || '…', 'mut']; return `<span class="tag ${c}"><span class="dot ${c === 'warn' ? 'pulse' : ''}"></span>${t}</span>`; };
+  no_service:['无服务','bad'], mifi_offline:['随身WiFi不可达','bad'], error:['错误','bad'], idle:['无受管号码在线','warn'], starting:['启动中','mut'], disabled:['已停用','mut'], no_device:['没有设备','bad']};
+const groups = () => S.status?.groups || [];
+const multi = () => groups().length > 1;
+const gstat = n => groups().find(g => g.group_id === n?.device_id) || S.status || {};
+const gname = n => multi() && n?.group_name ? `<span class="tag mut">${esc(n.group_name)}</span>` : '';
+const phaseTag = (st = S.status) => { const [t, c] = PHASE[st?.phase] || [st?.phase || '…', 'mut']; return `<span class="tag ${c}"><span class="dot ${c === 'warn' ? 'pulse' : ''}"></span>${t}</span>`; };
 const recvHold = () => (S.status?.holds || []).find(h => h.reason === 'manual');
 
 /* ----------------------------------------------------------- data refresh */
@@ -219,7 +224,9 @@ async function refresh() {
   S.status = await api('GET', '/status');
   S.nums = await api('GET', '/numbers?include_removed=' + (S.showRemoved ? 'true' : 'false'));
   const cur = S.status.current;
-  $('#topStatus').innerHTML = `${phaseTag()} <span class="small" style="margin-left:8px">${cur ? '当前在线：<b>' + esc(cur.label || cur.iccid) + '</b> ' + esc(cur.msisdn || '') : ''}</span>`;
+  $('#topStatus').innerHTML = multi()
+    ? `<span class="tag ${groups().every(g => g.phase === 'online' || g.phase === 'disabled') ? 'ok' : 'warn'}"><span class="dot"></span>${groups().filter(g => g.phase === 'online').length} / ${groups().filter(g => g.phase !== 'disabled').length} 组在线</span> <span class="small" style="margin-left:8px">${groups().filter(g => g.current).map(g => esc(g.current.label || g.current.iccid)).join(' · ')}</span>`
+    : `${phaseTag()} <span class="small" style="margin-left:8px">${cur ? '当前在线：<b>' + esc(cur.label || cur.iccid) + '</b> ' + esc(cur.msisdn || '') : ''}</span>`;
   const m = S.status.modem || {};
   $('#sideStatus').innerHTML = `<div class="row" style="gap:6px">${icon('wifi')}${esc(m.network_provider || '-')} ${esc(m.network_type || '')}</div><div class="mut">上次收取 ${ago(S.status.last_poll_at)}</div>`;
   const h = recvHold();
@@ -241,7 +248,7 @@ async function pollMessages() {
 
 /* ------------------------------------------------------------------ pages */
 const PAGES = {};
-const TITLES = {overview:'概览', receive:'收码', numbers:'号卡管理', messages:'短信记录', send:'发送短信', settings:'系统设置', events:'事件日志', access:'接入 API / MCP'};
+const TITLES = {overview:'概览', receive:'收码', numbers:'号卡管理', messages:'短信记录', send:'发送短信', devices:'设备管理', settings:'系统设置', events:'事件日志', access:'接入 API / MCP'};
 
 function render() {
   const p = S.route;
@@ -271,23 +278,23 @@ function msgHtml(m, isNew) {
 /* overview */
 PAGES.overview = {
   async render() {
-    const s = S.status, m = s.modem || {}, cap = s.capacity || {}, cur = s.current, home = s.home, h = recvHold();
     const kpi = (ic, lab, val, sub) => `<div class="card kpi"><div class="ic">${icon(ic)}</div><div style="min-width:0"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div></div>`;
-    let banner = '';
-    if (!home) banner = `<div class="alert">${icon('warn')}<div>还没有设置常驻号。常驻号会一直在线，短信实时到达。<a href="#/settings">去设置</a></div></div>`;
-    else if (cur && cur.iccid !== home.iccid && !h && !s.switch_target) banner = '';
-    $('#page').innerHTML = `${banner}
-      <div class="grid g4">
-        ${kpi('sim', '当前在线号码', cur ? esc(cur.label || cur.iccid) : '—', cur ? esc(cur.msisdn || cur.provider || '') + (home && cur.iccid === home.iccid ? ' · 常驻号' : '') : esc(s.phase_detail || ''))}
+    const noHome = groups().filter(g => g.phase !== 'disabled' && !g.home_iccid);
+    const banner = noHome.length ? `<div class="alert">${icon('warn')}<div>${noHome.map(g => esc(g.name)).join('、')} 还没有设置常驻号。常驻号会一直在线，短信实时到达。<a href="#/devices">去设置</a></div></div>` : '';
+    const grpRows = groups().map(g => {
+      const m = g.modem || {}, cap = g.capacity || {}, cur = g.current, st = g.stats || {};
+      return `${multi() ? `<div class="row" style="margin:4px 0 10px"><b>${esc(g.name)}</b><span class="small mut mono">${esc(g.ble_device)} · ${esc(g.mifi_host)}</span></div>` : ''}<div class="grid g4" style="margin-bottom:16px">
+        ${kpi('sim', '当前在线号码', cur ? esc(cur.label || cur.iccid) : '—', cur ? esc(cur.msisdn || cur.provider || '') + (g.home_iccid && cur.iccid === g.home_iccid ? ' · 常驻号' : '') : esc(g.phase_detail || ''))}
         ${kpi('wifi', '网络', esc((m.network_provider || '-') + ' ' + (m.network_type || '')), '信号 ' + esc(m.signalbar || '-') + '/5')}
-        ${kpi('chip', '运行阶段', phaseTag(), esc(s.phase_detail || '') )}
-        ${kpi('store', '随身WiFi短信存储', cap.total ? cap.used + ' / ' + cap.total : '-', '入库 ' + s.stats.stored + ' · 已删除 ' + s.stats.deleted)}
-      </div>
-      <div class="grid g2" style="margin-top:20px">
+        ${kpi('chip', '运行阶段', phaseTag(g), esc(g.phase_detail || ''))}
+        ${kpi('store', '随身WiFi短信存储', cap.total ? cap.used + ' / ' + cap.total : '-', '入库 ' + (st.stored || 0) + ' · 已删除 ' + (st.deleted || 0))}
+      </div>`; }).join('');
+    $('#page').innerHTML = `${banner}${grpRows}
+      <div class="grid g2" style="margin-top:4px">
         <div class="card" style="margin:0"><div class="card-h"><h3>号卡</h3><span class="sp"></span><a class="btn sm" href="#/numbers">管理</a></div>
           <div class="card-b" style="padding:6px 20px">${S.nums.filter(n => n.on_card).map(n => `
             <div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)">
-              <div style="flex:1;min-width:0"><b>${esc(numName(n))}</b> ${n.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}<div class="small mut">${esc(n.msisdn || '未填号码')} · ${esc(n.card_provider)}</div></div>
+              <div style="flex:1;min-width:0"><b>${esc(numName(n))}</b> ${n.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''} ${gname(n)}<div class="small mut">${esc(n.msisdn || '未填号码')} · ${esc(n.card_provider)}</div></div>
               ${n.online ? '<span class="tag ok"><span class="dot"></span>在线</span>' : '<span class="tag mut">离线</span>'}
               <a class="btn sm ${n.online ? '' : 'pri'}" href="#/receive" data-pick="${esc(n.iccid)}">收码</a></div>`).join('') || '<div class="empty">暂无号卡</div>'}
           </div></div>
@@ -315,10 +322,11 @@ PAGES.receive = {
     this.update(true);
   },
   async update(full) {
-    const s = S.status, h = recvHold(), sel = byIccid(S.recvSel);
+    const sel = byIccid(S.recvSel), s = gstat(sel);
+    const h = (S.status.holds || []).find(x => x.reason === 'manual' && sel && x.iccid === sel.iccid) || recvHold();
     $('#rcvList').innerHTML = S.nums.filter(n => n.on_card).map(n => `<div class="it ${n.iccid === S.recvSel ? 'sel' : ''}" data-sel="${esc(n.iccid)}">
-      <div style="min-width:0"><div class="nm">${esc(numName(n))} ${n.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}</div><div class="small mut mono">${esc(n.msisdn || '未填号码')}</div></div><span class="sp"></span>
-      ${n.online ? '<span class="tag ok"><span class="dot"></span>在线</span>' : (s.switch_target === n.iccid ? '<span class="tag warn"><span class="dot pulse"></span>切换中</span>' : '<span class="tag mut">离线</span>')}</div>`).join('');
+      <div style="min-width:0"><div class="nm">${esc(numName(n))} ${n.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''} ${gname(n)}</div><div class="small mut mono">${esc(n.msisdn || '未填号码')}</div></div><span class="sp"></span>
+      ${n.online ? '<span class="tag ok"><span class="dot"></span>在线</span>' : (gstat(n).switch_target === n.iccid ? '<span class="tag warn"><span class="dot pulse"></span>切换中</span>' : '<span class="tag mut">离线</span>')}</div>`).join('');
     if (!sel) { $('#rcvBody').innerHTML = '<div class="empty">暂无号卡</div>'; return; }
     $('#rcvTitle').innerHTML = esc(numName(sel)) + ' <span class="mono small mut">' + esc(sel.msisdn || '') + '</span>';
     const mine = h && h.iccid === sel.iccid;
@@ -348,7 +356,7 @@ PAGES.receive = {
         <div class="small mut">切换完成前，<b>先不要</b>往这个号发短信。</div>`;
     } else {
       body = `<div style="text-align:center;padding:26px 10px"><div style="font-size:16px;font-weight:600;margin-bottom:6px">这个号码当前离线</div>
-        <div class="mut small" style="margin-bottom:18px">点击后会切换到这个号码（约 40 秒），期间当前在线的号码会短暂离线。<br>默认保持 ${Math.round(s.settings.wait_hold_seconds / 60)} 分钟，结束后${s.home ? '自动切回常驻号 ' + esc(s.home.label || '') : '停留在这个号码'}。</div>
+        <div class="mut small" style="margin-bottom:18px">点击后会切换到这个号码（约 40 秒），期间${multi() ? '同一设备组里' : ''}当前在线的号码会短暂离线。<br>默认保持 ${Math.round(S.status.settings.wait_hold_seconds / 60)} 分钟，结束后${s.home ? '自动切回常驻号 ' + esc(s.home.label || '') : '停留在这个号码'}。</div>
         <button class="btn pri lg" data-start="${esc(sel.iccid)}">${icon('recv')}开始收码</button></div>`;
     }
     $('#rcvActs').innerHTML = acts;
@@ -375,7 +383,7 @@ PAGES.numbers = {
       <div class="tw"><table><thead><tr><th>名称</th><th>手机号</th><th>运营商 / 配置</th><th>ICCID</th><th>状态</th><th>短信</th><th style="text-align:right">操作</th></tr></thead><tbody id="numRows"></tbody></table></div></div>
       <div class="alert info">${icon('info')}<div>新增：粘贴激活码或上传二维码，通过蓝牙写入卡（约 40 秒）。删除：从卡上永久移除，不可撤销；在线的号码不能删除。卡上昵称会写入卡，其他信息只保存在平台里。</div></div>`;
     $('#showRemoved').onchange = async e => { S.showRemoved = e.target.checked; await refresh(); this.tick(); };
-    $('#refreshCard').onclick = async e => { const b = e.target; b.disabled = true; b.textContent = '读取中…'; try { const r = await api('POST', '/card/refresh'); toast(`读取成功：${r.profiles.length} 个号码，剩余 ${(r.free_nvm / 1024).toFixed(1)} KB`); await refresh(); this.tick(); } catch (err) { toast(err.message, true); } b.disabled = false; b.textContent = '从卡上刷新'; };
+    $('#refreshCard').onclick = async e => { const b = e.target; b.disabled = true; b.textContent = '读取中…'; try { const r = await api('POST', '/card/refresh'); toast(`读取成功：${r.profiles.length} 个号码` + (r.free_nvm ? `，剩余 ${(r.free_nvm / 1024).toFixed(1)} KB` : '')); await refresh(); this.tick(); } catch (err) { toast(err.message, true); } b.disabled = false; b.textContent = '从卡上刷新'; };
     $('#addBtn').onclick = openAdd;
     this.tick();
   },
@@ -383,10 +391,10 @@ PAGES.numbers = {
     const el = $('#numRows'); if (!el) return;
     el.innerHTML = S.nums.map(p => {
       let st = !p.on_card ? '<span class="tag bad">已删除</span>' : p.online ? '<span class="tag ok"><span class="dot"></span>在线</span>'
-        : S.status.switch_target === p.iccid ? '<span class="tag warn"><span class="dot pulse"></span>切换中</span>' : '<span class="tag mut">离线</span>';
+        : gstat(p).switch_target === p.iccid ? '<span class="tag warn"><span class="dot pulse"></span>切换中</span>' : '<span class="tag mut">离线</span>';
       if (p.last_switch_error) st += ` <span class="tag bad" title="${esc(p.last_switch_error)}">上次切换失败</span>`;
       const tags = (p.tags || '').split(',').filter(Boolean).map(t => `<span class="tag mut">${esc(t.trim())}</span>`).join(' ');
-      return `<tr><td><div class="row" style="gap:6px"><b>${esc(numName(p))}</b>${p.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}${tags}</div>
+      return `<tr><td><div class="row" style="gap:6px"><b>${esc(numName(p))}</b>${p.is_home ? '<span class="tag">' + icon('home') + '常驻</span>' : ''}${gname(p)}${tags}</div>
           ${p.notes ? `<div class="small mut">${esc(p.notes)}</div>` : ''}${p.card_nickname ? `<div class="small mut">卡上昵称：${esc(p.card_nickname)}</div>` : ''}</td>
         <td class="mono">${esc(p.msisdn || '—')}</td>
         <td>${esc(p.card_provider)}<div class="small mut">${esc(p.card_name)}</div></td>
@@ -404,6 +412,7 @@ PAGES.numbers = {
 function openAdd() {
   const d = $('#dlg');
   d.innerHTML = `<form method="dialog" id="addForm"><div class="card-h"><h3>新增号卡</h3></div><div class="card-b"><div class="form">
+    ${multi() ? `<span class="mut">写入哪张卡</span><select name="group_id">${groups().filter(g => g.phase !== 'disabled').map(g => `<option value="${esc(g.group_id)}">${esc(g.name)} · ${esc(g.ble_device)}</option>`).join('')}</select>` : ''}
     <span class="mut">激活码</span><input name="activation_code" placeholder="LPA:1$smdp.example.com$MATCHING-ID">
     <span class="mut">或二维码</span><div class="row"><input type="file" name="qr" accept="image/*" id="qrFile" style="height:auto;padding:6px"><span id="qrInfo" class="small mut"></span></div>
     <span class="mut">确认码</span><input name="confirmation_code" placeholder="可选">
@@ -516,6 +525,126 @@ PAGES.send = {
   },
 };
 
+/* devices */
+PAGES.devices = {
+  render() {
+    $('#page').innerHTML = `
+      <div class="alert info">${icon('info')}<div>每个<b>设备组</b> = 一张 9eSIM 蓝牙卡 + 插着它的一台随身 WiFi。每组同时有一个号码在线，几组就有几个号同时实时收短信。
+        同型号随身 WiFi 出厂地址都是 <span class="mono">192.168.0.1</span>，接入第二台时，<b>先只插新的那台</b>，在向导里把它改成别的地址。</div></div>
+      <div class="card"><div class="card-h"><h3>设备组</h3><span class="sp"></span><button class="btn pri" id="addGroup">＋ 添加设备组</button></div><div class="card-b" id="grpList"></div></div>
+      <div class="grid g2">
+        <div class="card" style="margin:0"><div class="card-h"><h3>附近的 9eSIM 卡</h3><span class="sp"></span><button class="btn sm" id="scanCards">扫描</button></div><div class="card-b" id="cardScan"><div class="small mut">卡空闲时才会广播；正在被其他蓝牙 App 连接的卡扫不到。</div></div></div>
+        <div class="card" style="margin:0"><div class="card-h"><h3>连接的随身 WiFi</h3><span class="sp"></span><button class="btn sm" id="scanMifis">扫描</button></div><div class="card-b" id="mifiScan"><div class="small mut">扫描 Mac 上的 USB 网卡，找出随身 WiFi 的管理地址。</div></div></div>
+      </div>`;
+    $('#addGroup').onclick = () => openGroup();
+    $('#scanCards').onclick = async e => { const el = $('#cardScan'); e.target.disabled = true; el.innerHTML = '<div class="row"><div class="spin"></div>扫描中（约 6 秒）…</div>';
+      try { el.innerHTML = cardRows(await api('POST', '/discover/cards')); } catch (err) { el.innerHTML = `<div class="small" style="color:var(--bad)">${esc(err.message)}</div>`; } e.target.disabled = false; };
+    $('#scanMifis').onclick = async e => { const el = $('#mifiScan'); e.target.disabled = true; el.innerHTML = '<div class="row"><div class="spin"></div>扫描中…</div>';
+      try { el.innerHTML = mifiRows(await api('GET', '/discover/mifis')); } catch (err) { el.innerHTML = `<div class="small" style="color:var(--bad)">${esc(err.message)}</div>`; } e.target.disabled = false; };
+    this.tick();
+  },
+  tick() {
+    const el = $('#grpList'); if (!el || document.querySelector('dialog[open]')) return;
+    el.innerHTML = groups().map(g => {
+      const m = g.modem || {}, home = S.nums.find(n => n.iccid === g.home_iccid);
+      return `<div class="row" style="padding:12px 0;border-bottom:1px solid var(--line);align-items:flex-start">
+        <div style="flex:1;min-width:240px"><div class="row" style="gap:8px"><b>${esc(g.name)}</b>${phaseTag(g)}${g.rotation_enabled ? '<span class="tag warn">自动轮询</span>' : ''}</div>
+          <div class="small mut" style="margin-top:4px">${icon('sim')} 卡 <span class="mono">${esc(g.ble_device || '-')}</span>${g.ble_password_set ? '（自定义密码）' : ''}
+            &nbsp; ${icon('wifi')} 随身WiFi <span class="mono">${esc(g.mifi_host)}</span>${g.mifi_imei ? ' · IMEI …' + esc(g.mifi_imei.slice(-4)) : ''} · ${esc((m.network_provider || '') + ' ' + (m.network_type || ''))}</div>
+          <div class="small mut">常驻号：${home ? esc(numName(home)) : '<span style="color:var(--warn)">未设置</span>'} · 当前：${g.current ? esc(g.current.label || g.current.iccid) : '—'} · 卡上 ${S.nums.filter(n => n.device_id === g.group_id && n.on_card).length} 个号码</div></div>
+        <div class="row"><button class="btn sm" data-gedit="${esc(g.group_id)}">编辑</button>
+          <button class="btn sm" data-gtoggle="${esc(g.group_id)}">${g.enabled ? '停用' : '启用'}</button>
+          ${groups().length > 1 ? `<button class="btn sm danger" data-gdel="${esc(g.group_id)}">移除</button>` : ''}</div></div>`;
+    }).join('') || '<div class="empty">还没有设备组</div>';
+  },
+};
+function cardRows(r, pick) {
+  const rows = r.cards.map(c => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
+    <span class="mono" style="flex:1">${esc(c.name)}</span><span class="small mut">${c.rssi} dBm</span>
+    ${c.group_name ? `<span class="tag mut">已在 ${esc(c.group_name)}</span>` : (pick ? `<button type="button" class="btn sm pri" data-pickcard="${esc(c.name)}">选这张</button>` : '<span class="tag ok">新卡</span>')}</div>`).join('');
+  const busy = (r.configured || []).map(c => `<div class="small mut" style="padding-top:6px">${esc(c.name)}（${esc(c.group_name)}）没有广播：可能正在被平台或其他 App 使用</div>`).join('');
+  return (rows || '<div class="small mut">没有扫到 9eSIM 卡。确认卡已插在供电的设备里，并退出手机/电脑上的 9eSIM、NekokoLPA 等 App。</div>') + busy;
+}
+function mifiRows(r, pick) {
+  const rows = r.mifis.map(m => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
+    <span class="mono" style="flex:1">${esc(m.host)} <span class="small mut">${esc(m.interfaces.join(', '))}</span></span><span class="small mut">${esc(m.network_provider + ' ' + m.network_type)}</span>
+    ${m.conflict ? '<span class="tag bad">地址冲突</span>' : ''}${m.group_name ? `<span class="tag mut">已在 ${esc(m.group_name)}</span>` : ''}
+    ${pick ? `<button type="button" class="btn sm ${m.group_name ? '' : 'pri'}" data-pickmifi="${esc(m.host)}">选这台</button>` : ''}</div>`).join('');
+  const conf = r.conflicts.map(c => `<div class="alert" style="margin:8px 0 0">${icon('warn')}<div>${esc(c.interfaces.join('、'))} 在同一网段 ${esc(c.subnet)}：多台随身 WiFi 地址相同，只能访问到其中一台。请先只插一台，改好地址后再插下一台。</div></div>`).join('');
+  return (rows || '<div class="small mut">没有发现随身 WiFi。检查 USB 线，等它开机完成（约 1 分钟）后再扫。</div>') + conf;
+}
+function openGroup(gid) {
+  const g = gid ? groups().find(x => x.group_id === gid) : null, d = $('#dlg');
+  const nums = g ? S.nums.filter(n => n.device_id === g.group_id && n.on_card) : [];
+  d.innerHTML = `<form method="dialog" id="gForm"><div class="card-h"><h3>${g ? '编辑设备组' : '添加设备组'}</h3></div><div class="card-b" style="max-height:72vh;overflow:auto">
+    <div class="form">
+      <span class="mut">名称</span><input name="name" placeholder="例如 设备组 2">
+      <span style="grid-column:1/-1;font-weight:600;margin-top:6px">① 9eSIM 蓝牙卡</span>
+      <span class="mut">蓝牙名</span><div class="row" style="flex-wrap:nowrap"><input name="ble_device" placeholder="9eSIMxxxxxx"><button type="button" class="btn" id="gScanCard">扫描</button></div>
+      <div class="hint" id="gCardList" style="margin-top:-4px"></div>
+      <span class="mut">蓝牙密码</span><input name="ble_password" placeholder="${g && g.ble_password_set ? '已设置，留空不修改' : '留空 = 默认密码（由卡名推算）'}">
+      <span></span><div class="row"><button type="button" class="btn sm" id="gTestCard">测试连接</button><span class="small" id="gCardRes"></span></div>
+      <span style="grid-column:1/-1;font-weight:600;margin-top:6px">② 随身 WiFi</span>
+      <span class="mut">管理地址</span><div class="row" style="flex-wrap:nowrap"><input name="mifi_host" placeholder="192.168.0.1"><button type="button" class="btn" id="gScanMifi">扫描</button></div>
+      <div class="hint" id="gMifiList" style="margin-top:-4px"></div>
+      <span class="mut">后台密码</span><input name="mifi_password" placeholder="${g ? '留空不修改' : '默认 admin'}">
+      <span></span><div class="row"><button type="button" class="btn sm" id="gTestMifi">测试登录</button><span class="small" id="gMifiRes"></span></div>
+      <div id="gReloc" style="grid-column:1/-1;display:none" class="alert"><div style="width:100%">${icon('warn')} <b>这个地址已被其他设备组使用，或与其他随身 WiFi 冲突。</b>
+        <div class="small" style="margin:6px 0">先拔掉其他随身 WiFi、只插这一台，再把它改到新地址。设备会自动重启（约 1～2 分钟），USB 网络会断开一下。</div>
+        <div class="row"><span class="small">新地址</span><input id="gNewHost" style="width:160px"><button type="button" class="btn sm pri" id="gDoReloc">改地址</button><span class="small" id="gRelocRes"></span></div></div></div>
+      <input type="hidden" name="mifi_imei">
+      ${g ? `<span style="grid-column:1/-1;font-weight:600;margin-top:6px">③ 调度</span>
+      <span class="mut">常驻号</span><select name="home_iccid"><option value="">（不设置）</option>${nums.map(n => `<option value="${esc(n.iccid)}">${esc(numName(n))} ${esc(n.msisdn || '')}</option>`).join('')}</select>
+      <span class="mut">自动轮询</span><label class="row"><span class="switch"><input type="checkbox" name="rotation_enabled"><span></span></span><span class="small mut">本组号码轮流上线（不推荐，离线号码可能丢短信）</span></label>` :
+      '<div class="hint" style="grid-column:1/-1;margin-top:4px">保存后平台会读卡、登记卡上的号码；常驻号在“编辑”里设置。</div>'}
+    </div></div>
+    <div class="dlg-f"><button class="btn" value="cancel" formnovalidate>取消</button><button class="btn pri" value="go" id="gSave">保存</button></div></form>`;
+  const f = $('#gForm'), E = f.elements;
+  if (g) { for (const k of ['name','ble_device','mifi_host','mifi_imei','home_iccid']) E[k].value = g[k] || ''; E.rotation_enabled.checked = g.rotation_enabled; }
+  else E.name.value = '设备组 ' + (groups().length + 1);
+  d.showModal();
+  let lastScan = null, cardOk = !!g;
+  const usedBy = host => groups().find(x => x.mifi_host === host && x.group_id !== g?.group_id);
+  const checkHost = () => { const u = usedBy(E.mifi_host.value.trim()), conflict = lastScan && lastScan.mifis.some(m => m.host === E.mifi_host.value.trim() && m.conflict);
+    $('#gReloc').style.display = (u || conflict) ? '' : 'none'; if (lastScan && !$('#gNewHost').value) $('#gNewHost').value = lastScan.suggested_host; };
+  $('#gScanCard').onclick = async () => { $('#gCardList').innerHTML = '扫描中（约 6 秒）…'; try { $('#gCardList').innerHTML = cardRows(await api('POST', '/discover/cards'), true); } catch (err) { $('#gCardList').textContent = err.message; } };
+  $('#gScanMifi').onclick = async () => { $('#gMifiList').innerHTML = '扫描中…'; try { lastScan = await api('GET', '/discover/mifis'); $('#gMifiList').innerHTML = mifiRows(lastScan, true); checkHost(); } catch (err) { $('#gMifiList').textContent = err.message; } };
+  f.onclick = e => { const c = e.target.closest('[data-pickcard]'), m = e.target.closest('[data-pickmifi]');
+    if (c) { E.ble_device.value = c.dataset.pickcard; $('#gCardRes').textContent = ''; cardOk = false; }
+    if (m) { E.mifi_host.value = m.dataset.pickmifi; $('#gMifiRes').textContent = ''; checkHost(); } };
+  E.mifi_host.oninput = checkHost;
+  $('#gTestCard').onclick = async e => { const r = $('#gCardRes'); e.target.disabled = true; r.textContent = '连接中（约 10 秒）…'; r.style.color = '';
+    try { const x = await api('POST', '/discover/cards/test', {name: E.ble_device.value.trim(), password: E.ble_password.value || null});
+      r.innerHTML = `✓ 连接成功 · EID …${esc((x.eid || '').slice(-6))} · ${x.profiles.length} 个号码${x.free_nvm ? ' · 剩余 ' + (x.free_nvm / 1024).toFixed(0) + ' KB' : ''}`; r.style.color = 'var(--ok)'; cardOk = true; }
+    catch (err) { r.textContent = '✗ ' + err.message; r.style.color = 'var(--bad)'; } e.target.disabled = false; };
+  $('#gTestMifi').onclick = async e => { const r = $('#gMifiRes'); e.target.disabled = true; r.textContent = '登录中…'; r.style.color = '';
+    try { const x = await api('POST', '/discover/mifis/test', {host: E.mifi_host.value.trim(), password: E.mifi_password.value || (g ? '' : 'admin')});
+      E.mifi_imei.value = x.imei || '';
+      r.innerHTML = `✓ ${esc(x.hardware_version || '随身WiFi')} · IMEI …${esc((x.imei || '').slice(-4))} · ${esc(x.network_provider + ' ' + x.network_type)}${x.group_name && x.group_id !== g?.group_id ? ' · <b>已在 ' + esc(x.group_name) + '</b>' : ''}`; r.style.color = 'var(--ok)'; }
+    catch (err) { r.textContent = '✗ ' + err.message; r.style.color = 'var(--bad)'; } e.target.disabled = false; checkHost(); };
+  $('#gDoReloc').onclick = async e => {
+    const host = E.mifi_host.value.trim(), nh = $('#gNewHost').value.trim(), r = $('#gRelocRes');
+    if (!confirm(`把 ${host} 的随身 WiFi 改到 ${nh}？\n设备会重启，请确认现在只插着这一台。`)) return;
+    e.target.disabled = true; r.textContent = '修改中，等待设备重启（1～3 分钟）…'; r.style.color = '';
+    try { const x = await api('POST', '/discover/mifis/relocate', {host, password: E.mifi_password.value || 'admin', new_host: nh});
+      E.mifi_host.value = x.host; E.mifi_imei.value = x.imei || ''; r.textContent = `✓ 已改到 ${x.host}（${x.seconds} 秒）`; r.style.color = 'var(--ok)'; $('#gReloc').style.display = 'none'; }
+    catch (err) { r.textContent = '✗ ' + err.message; r.style.color = 'var(--bad)'; } e.target.disabled = false; };
+  f.onsubmit = async e => {
+    if (e.submitter && e.submitter.value !== 'go') return;
+    e.preventDefault();
+    const b = {name: E.name.value.trim(), ble_device: E.ble_device.value.trim(), mifi_host: E.mifi_host.value.trim(), mifi_imei: E.mifi_imei.value};
+    if (E.ble_password.value) b.ble_password = E.ble_password.value;
+    if (E.mifi_password.value) b.mifi_password = E.mifi_password.value; else if (!g) b.mifi_password = 'admin';
+    if (g) { b.home_iccid = E.home_iccid.value; b.rotation_enabled = E.rotation_enabled.checked;
+      if (b.rotation_enabled && !g.rotation_enabled && !confirm('开启自动轮询后，不在线的号码收不到实时短信，可能丢信息。确定开启？')) return; }
+    if (!b.ble_device || !b.mifi_host) return toast('请填写蓝牙名和管理地址', true);
+    if (!cardOk && !confirm('还没有测试卡的连接，确定保存？')) return;
+    $('#gSave').disabled = true;
+    try { await api(g ? 'PATCH' : 'POST', g ? '/groups/' + g.group_id : '/groups', b); toast(g ? '已保存' : '设备组已添加，正在读卡…'); d.close(); await refresh(); render(); }
+    catch (err) { toast(err.message, true); $('#gSave').disabled = false; }
+  };
+}
+
 /* settings */
 PAGES.settings = {
   render() {
@@ -524,12 +653,10 @@ PAGES.settings = {
     const num = (k, label, unit, hint) => `<span class="mut">${label}</span><div class="row" style="flex-wrap:nowrap"><input type="number" id="st_${k}" value="${st[k]}" style="width:120px"><span class="mut">${unit}</span></div>${hint ? `<div class="hint">${hint}</div>` : ''}`;
     $('#page').innerHTML = `
       <div class="card"><div class="card-h"><h3>号码调度</h3></div><div class="card-b"><div class="form">
-        <span class="mut">常驻号</span><select id="st_home_iccid"><option value="">（不设置）</option>${nums.map(n => `<option value="${esc(n.iccid)}" ${n.iccid === st.home_iccid ? 'selected' : ''}>${esc(numName(n))} ${esc(n.msisdn || '')}</option>`).join('')}</select>
-        <div class="hint">常驻号平时一直在线，短信实时到达。收码会话结束后自动切回常驻号。</div>
+        <span class="mut">常驻号 / 轮询</span><div><a href="#/devices">在“设备管理”里按设备组设置</a></div>
         ${num('wait_hold_seconds', '收码保持', '秒', '点“开始收码”或 AI 等码时，号码保持在线的时长')}
         ${num('switch_timeout_seconds', '切号超时', '秒', '')}
-        ${sw('rotation_enabled', '自动轮询', '所有号码轮流上线（不推荐）。离线的号码收不到实时短信，可能丢信息')}
-        ${num('dwell_seconds', '轮询停留', '秒', '仅在开启自动轮询时生效')}
+        ${num('dwell_seconds', '轮询停留', '秒', '仅对开启了自动轮询的设备组生效')}
       </div></div></div>
       <div class="card"><div class="card-h"><h3>短信收取</h3></div><div class="card-b"><div class="form">
         ${num('poll_seconds', '收取间隔', '秒', '')}
@@ -538,10 +665,9 @@ PAGES.settings = {
       </div></div></div>
       <div class="row"><button class="btn pri" id="saveSettings">保存设置</button></div>`;
     $('#saveSettings').onclick = async () => {
-      const b = {home_iccid: $('#st_home_iccid').value};
+      const b = {};
       for (const k of ['dwell_seconds','poll_seconds','switch_timeout_seconds','wait_hold_seconds']) b[k] = +$('#st_' + k).value;
-      for (const k of ['delete_after_store','api_allow_send','rotation_enabled']) b[k] = $('#st_' + k).checked;
-      if (b.rotation_enabled && !st.rotation_enabled && !confirm('开启自动轮询后，不在线的号码收不到实时短信，可能丢信息。确定开启？')) return;
+      for (const k of ['delete_after_store','api_allow_send']) b[k] = $('#st_' + k).checked;
       try { await api('PATCH', '/settings', b); toast('设置已保存'); await refresh(); } catch (err) { toast(err.message, true); }
     };
   },
@@ -586,16 +712,32 @@ print(r["code"])</pre></div></div>`;
 
 /* --------------------------------------------------------------- actions */
 document.addEventListener('click', async e => {
+  const g = e.target.closest('[data-gedit],[data-gtoggle],[data-gdel]');
+  if (g) {
+    e.preventDefault();
+    try {
+      if (g.dataset.gedit) openGroup(g.dataset.gedit);
+      else if (g.dataset.gtoggle) { const x = groups().find(y => y.group_id === g.dataset.gtoggle);
+        if (x.enabled && !confirm(`停用 ${x.name}？停用后这组的号码不再收短信。`)) return;
+        await api('PATCH', '/groups/' + x.group_id, {enabled: !x.enabled}); await refresh(); render(); }
+      else if (g.dataset.gdel) { const x = groups().find(y => y.group_id === g.dataset.gdel);
+        if (!confirm(`移除设备组 ${x.name}？卡上的号码不会被删除，只是平台不再管理这组设备。`)) return;
+        await api('DELETE', '/groups/' + x.group_id); toast('已移除'); await refresh(); render(); }
+    } catch (err) { toast(err.message, true); }
+    return;
+  }
   const t = e.target.closest('[data-pick],[data-sel],[data-start],[data-ext],[data-end],[data-edit],[data-del],[data-home],[data-copy],[data-filter]');
   if (!t) return;
   try {
     if (t.dataset.pick) { S.recvSel = t.dataset.pick; return; }
     if (t.dataset.filter) { S.msgFilter.number = t.dataset.filter; return; }
     e.preventDefault();
-    if (t.dataset.sel) { if (recvHold() && recvHold().iccid !== t.dataset.sel) toast('另一个号码的收码会话进行中，先结束它'); S.recvSel = t.dataset.sel; PAGES.receive.update(true); }
+    if (t.dataset.sel) { S.recvSel = t.dataset.sel; PAGES.receive.update(true); }
     else if (t.dataset.start) {
       t.disabled = true;
-      const old = recvHold(); if (old && old.iccid !== t.dataset.start) await api('DELETE', '/holds/' + old.id);
+      const tg = byIccid(t.dataset.start)?.device_id;
+      const old = (S.status.holds || []).find(x => x.reason === 'manual' && x.group_id === tg);
+      if (old && old.iccid !== t.dataset.start) await api('DELETE', '/holds/' + old.id);
       await api('POST', `/numbers/${t.dataset.start}/receive`, {});
       await refresh(); PAGES.receive.update(true);
     }
@@ -605,7 +747,7 @@ document.addEventListener('click', async e => {
     else if (t.dataset.home) {
       const p = byIccid(t.dataset.home);
       if (!confirm(`把 ${numName(p)} 设为常驻号？\n没有收码会话时，平台会切到这个号码并保持在线。`)) return;
-      await api('PATCH', '/settings', {home_iccid: p.iccid}); toast('已设为常驻号'); await refresh(); render();
+        await api('PATCH', '/groups/' + p.device_id, {home_iccid: p.iccid}); toast('已设为常驻号'); await refresh(); render();
     }
     else if (t.dataset.del) {
       const p = byIccid(t.dataset.del);
