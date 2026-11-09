@@ -61,7 +61,9 @@ do_start() {
   fi
   setup
   info "启动中…"
-  nohup "$PY" -m esimble.platform serve >>"$LOG" 2>&1 </dev/null &
+  # new session, no controlling terminal: closing the Terminal window won't stop it
+  nohup "$PY" -c 'import os, sys; os.setsid(); os.execv(sys.executable, [sys.executable, "-m", "esimble.platform", "serve"])' \
+    >>"$LOG" 2>&1 </dev/null &
   local pid=$!
   echo "$pid" >"$PIDFILE"
   local i
